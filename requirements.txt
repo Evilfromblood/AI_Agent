@@ -12,6 +12,7 @@ pyautogui>=0.9.54
 mss>=9.0.0
 pillow>=10.0.0
 edge-tts>=6.1.12
-pygame-ce>=2.5.0
+pygame-ce>=2.5.0; python_version >= "3.13"
+pygame>=2.5.0; python_version < "3.13"
 SpeechRecognition>=3.10.0
 pyttsx3>=2.90

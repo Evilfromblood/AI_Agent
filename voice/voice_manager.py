@@ -12,7 +12,7 @@ import threading
 import time
 import uuid
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, List, Optional, Union
 
 from colorama import Fore, Style
 
@@ -150,22 +150,62 @@ class VoiceManager:
         # Strip blockquotes (>) and bullet points at line starts
         cleaned = re.sub(r"^[\s*>#-]+\s*", "", cleaned, flags=re.MULTILINE)
 
+        # Convert raw symbols into readable conversational forms
+        symbol_replacements = [
+            (r"\s*&\s*", " and "),
+            (r"\s*%\s*", " percent "),
+            (r"\s*@\s*", " at "),
+            (r"\s*\+\s*", " plus "),
+            (r"\s*!=\s*", " not equal to "),
+            (r"\s*==\s*", " equals "),
+            (r"\s*>=\s*", " greater than or equal to "),
+            (r"\s*<=\s*", " less than or equal to "),
+            (r"\s*->\s*", " leads to "),
+        ]
+        for pattern, replacement in symbol_replacements:
+            cleaned = re.sub(pattern, replacement, cleaned)
+
+        # Expand common technical acronyms for natural conversational pronunciation
+        acronym_replacements = [
+            (r"\bCPU\b", "C P U"),
+            (r"\bRAM\b", "R A M"),
+            (r"\bGPU\b", "G P U"),
+            (r"\bAPI\b", "A P I"),
+            (r"\bURL\b", "U R L"),
+            (r"\bTTS\b", "T T S"),
+            (r"\bSTT\b", "S T T"),
+            (r"\bDOM\b", "Dom"),
+            (r"\bOS\b", "O S"),
+        ]
+        for pattern, replacement in acronym_replacements:
+            cleaned = re.sub(pattern, replacement, cleaned)
+
         # Normalize multiple spaces and line breaks
         cleaned = re.sub(r"\s+", " ", cleaned).strip()
 
         return cleaned
 
-    def speak(self, text: str, non_blocking: bool = True) -> None:
+    def speak(
+        self,
+        text: str,
+        blocking: bool = False,
+        non_blocking: Optional[bool] = None,
+    ) -> None:
         """
         Synthesize speech and play audio asynchronously or synchronously.
         Attempts edge-tts (Azure neural voice) streaming via pygame.
         Gracefully falls back to offline pyttsx3 on error or disconnection.
+        :param text: Text to synthesize and speak
+        :param blocking: If True, blocks until audio finishes playing
+        :param non_blocking: Deprecated alias for not blocking
         """
         clean_text = self.clean_text_for_speech(text)
         if not clean_text:
             return
 
-        if non_blocking:
+        should_block = blocking if non_blocking is None else not non_blocking
+
+        if not should_block:
             thread = threading.Thread(
                 target=self._speak_sync,
                 args=(clean_text,),
@@ -261,12 +301,12 @@ class VoiceManager:
         self,
         timeout: Optional[int] = None,
         phrase_time_limit: Optional[int] = None,
-    ) -> Optional[str]:
+    ) -> str:
         """
         Listen to microphone input once and transcribe speech to text.
         :param timeout: Silence duration limit before giving up (seconds)
         :param phrase_time_limit: Max continuous duration for a single phrase
-        :return: Transcribed string or None if unrecognized/timed out/unavailable
+        :return: Clean transcribed string, or empty string on silence/error
         """
         timeout = timeout or self.listen_timeout
         phrase_time_limit = phrase_time_limit or self.phrase_time_limit
@@ -276,52 +316,59 @@ class VoiceManager:
                 f"{Fore.YELLOW}[Voice] Speech recognition hardware or PyAudio is unavailable on this system.\n"
                 f"        Please enter commands directly via keyboard.{Style.RESET_ALL}"
             )
-            return None
+            return ""
 
         try:
             print(f"\n{Fore.CYAN}[Listening...] Speak now.{Style.RESET_ALL}")
             with self._microphone as source:
-                self._recognizer.adjust_for_ambient_noise(source, duration=0.5)
+                self._recognizer.adjust_for_ambient_noise(source, duration=0.8)
                 audio = self._recognizer.listen(
                     source,
                     timeout=timeout,
                     phrase_time_limit=phrase_time_limit,
                 )
 
-            print(f"{Fore.CYAN}[Processing voice...]{Style.RESET_ALL}")
+            print(f"{Fore.CYAN}[Transcribing voice...]{Style.RESET_ALL}")
             transcription = self._recognizer.recognize_google(audio)
-            cleaned = transcription.strip() if transcription else None
+            cleaned = transcription.strip() if transcription else ""
             if cleaned:
                 print(f"{Fore.GREEN}[Voice Transcribed]: \"{cleaned}\"{Style.RESET_ALL}")
             return cleaned
 
         except sr.WaitTimeoutError:
             print(f"{Fore.LIGHTBLACK_EX}[Voice: Listening timed out (no speech detected)]{Style.RESET_ALL}")
-            return None
+            return ""
         except sr.UnknownValueError:
             print(f"{Fore.LIGHTBLACK_EX}[Voice: Speech could not be understood]{Style.RESET_ALL}")
-            return None
+            return ""
         except Exception as e:
             print(f"{Fore.RED}[Voice Error: {e}]{Style.RESET_ALL}")
-            return None
+            return ""
 
     def listen_continuous(
         self,
         callback_fn: Callable[[str], None],
-        wake_word: Optional[str] = None,
+        wake_words: Optional[Union[list[str], str]] = None,
     ) -> None:
         """
         Continuous ambient loop: listens for speech, verifies wake-word,
         and passes the extracted command into callback_fn.
         :param callback_fn: Function to receive the transcribed user command
-        :param wake_word: Wake-word trigger phrase (defaults to configured wake_word)
+        :param wake_words: List of trigger phrases (e.g. ['hey jarvis', 'jarvis'])
         """
-        wake_phrase = (wake_word or self.wake_word).strip().lower()
+        if wake_words is None:
+            wake_phrases = ["hey jarvis", "jarvis"]
+        elif isinstance(wake_words, str):
+            wake_phrases = [wake_words.strip().lower()]
+        else:
+            wake_phrases = [w.strip().lower() for w in wake_words]
+
+        primary_wake = wake_phrases[0]
         self._is_continuous_listening = True
 
         print(f"\n{Fore.GREEN}================================================================{Style.RESET_ALL}")
-        print(f"{Fore.GREEN} Ambient Voice Mode Active | Wake Word: '{wake_phrase.title()}'{Style.RESET_ALL}")
-        print(f"{Fore.LIGHTBLACK_EX} Speak naturally or say '{wake_phrase.title()}' to trigger actions. Press Ctrl+C to stop.{Style.RESET_ALL}")
+        print(f"{Fore.GREEN} Ambient Voice Mode Active | Wake Words: {', '.join(repr(w) for w in wake_phrases)}{Style.RESET_ALL}")
+        print(f"{Fore.LIGHTBLACK_EX} Speak naturally or say '{primary_wake.title()}' to trigger actions. Press Ctrl+C to stop.{Style.RESET_ALL}")
         print(f"{Fore.GREEN}================================================================{Style.RESET_ALL}\n")
 
         while self._is_continuous_listening:
@@ -331,16 +378,23 @@ class VoiceManager:
                     continue
 
                 spoken_lower = spoken.lower()
+                command = None
 
-                # Check for wake word in spoken phrase
-                if wake_phrase in spoken_lower:
-                    idx = spoken_lower.index(wake_phrase) + len(wake_phrase)
+                # Check each wake word in spoken phrase
+                matched_wake = None
+                for w in wake_phrases:
+                    if w in spoken_lower:
+                        matched_wake = w
+                        break
+
+                if matched_wake:
+                    idx = spoken_lower.index(matched_wake) + len(matched_wake)
                     command = spoken[idx:].strip(" ,.!?")
                     if not command:
-                        self.speak("Yes, how can I assist you?", non_blocking=False)
+                        self.speak("Yes, how can I assist you?", blocking=True)
                         continue
                 else:
-                    # In continuous voice mode, process whole phrase if wake word not explicitly required
+                    # In continuous voice mode, process full phrase if wake word omitted
                     command = spoken.strip()
 
                 if command:

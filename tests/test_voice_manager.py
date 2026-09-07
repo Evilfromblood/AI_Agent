@@ -57,7 +57,7 @@ def test_clean_text_for_speech_react_headers():
 
     assert "Final Answer:" not in clean
     assert "Thought:" not in clean
-    assert "CPU usage is 15% and RAM is healthy." in clean
+    assert "C P U usage is 15 percent and R A M is healthy." in clean
 
 
 def test_voice_manager_speak_edge_tts_mocked():
@@ -133,12 +133,23 @@ def test_voice_manager_listen_once_errors():
     vm._recognizer = mock_recognizer
     vm._microphone = MagicMock()
 
-    assert vm.listen_once() is None
+    assert vm.listen_once() == ""
 
     # 2. Unknown value error
     mock_recognizer.listen.side_effect = None
     mock_recognizer.recognize_google.side_effect = sr.UnknownValueError()
-    assert vm.listen_once() is None
+    assert vm.listen_once() == ""
+
+
+def test_clean_text_for_speech_symbols_and_acronyms():
+    raw = "CPU load is 15% & RAM usage is 50% @ 3.2 GHz"
+    clean = VoiceManager.clean_text_for_speech(raw)
+
+    assert "C P U" in clean
+    assert "percent" in clean
+    assert " and " in clean
+    assert "R A M" in clean
+    assert " at " in clean
 
 
 def test_voice_manager_listen_continuous_wake_word():
