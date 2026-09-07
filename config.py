@@ -96,6 +96,26 @@ class AssistantConfig(BaseModel):
         description="Keywords indicating potentially destructive terminal commands",
     )
 
+    # GUI Automation & Vision Settings (Phase 3.1)
+    screenshot_dir: str = Field(
+        default="screenshots",
+        description="Directory to store captured screen frames",
+    )
+    gui_typing_interval: float = Field(
+        default=0.05,
+        description="Delay in seconds between simulated key presses",
+    )
+    dangerous_hotkeys: List[List[str]] = Field(
+        default_factory=lambda: [
+            ["alt", "f4"],
+            ["win", "l"],
+            ["ctrl", "alt", "del"],
+            ["win", "x"],
+            ["ctrl", "w"],
+        ],
+        description="System shortcut combinations requiring explicit confirmation",
+    )
+
 
 # Singleton default configuration
 config = AssistantConfig()

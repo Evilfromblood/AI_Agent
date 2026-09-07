@@ -30,7 +30,7 @@ BANNER = f"""{Fore.CYAN}
   _ | | /_\\ | _ \\\\ \\ / /|_ _|/ __|
  | || |/ _ \\|   / \\ V /  | | \\__ \\
   \\__//_/ \\_\\_|_\\  \\_/  |___||___/
-{Fore.LIGHTBLACK_EX} Local Desktop Assistant | Phase 2: Hybrid Co-Pilot & Self-Thinking{Fore.CYAN}
+{Fore.LIGHTBLACK_EX} Local Desktop Assistant | Phase 3: Ambient Intelligence & GUI Action Engine{Fore.CYAN}
 ================================================================{Style.RESET_ALL}
 """
 

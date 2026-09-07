@@ -123,6 +123,34 @@ class SafetyGuard:
             if not authorized:
                 raise PermissionError(f"Action denied by user authorization: {reason}")
 
+    def is_dangerous_hotkey(self, keys: list[str]) -> tuple[bool, str]:
+        """Check if hotkey sequence matches known dangerous system shortcuts."""
+        norm_keys = [str(k).strip().lower() for k in keys]
+        for combo in config.dangerous_hotkeys:
+            combo_norm = [c.lower() for c in combo]
+            if sorted(norm_keys) == sorted(combo_norm):
+                return True, f"Dangerous system hotkey combination detected: '{' + '.join(combo)}'"
+        return False, ""
+
+    def guard_hotkey(self, keys: list[str]) -> None:
+        """Evaluate hotkey combination and prompt authorization if potentially destructive."""
+        is_dangerous, reason = self.is_dangerous_hotkey(keys)
+        if is_dangerous:
+            authorized = self.authorize_action(reason, f"Hotkey: {' + '.join(keys)}")
+            if not authorized:
+                raise PermissionError(f"Action denied by user authorization: {reason}")
+
+    def guard_screen_type(self, text: str) -> None:
+        """Inspect text about to be typed into active GUI window for destructive commands."""
+        is_dest, reason = self.is_destructive_command(text)
+        if is_dest:
+            authorized = self.authorize_action(
+                f"Destructive text injection detected ({reason})",
+                f"Type text: '{text[:80]}'",
+            )
+            if not authorized:
+                raise PermissionError(f"Action denied by user authorization: {reason}")
+
 
 # Global guardrail instance
 guardrails = SafetyGuard()

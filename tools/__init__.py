@@ -9,6 +9,7 @@ import tools.file_tools
 import tools.scraper_tools
 import tools.browser_tools
 import tools.system_tools
+import tools.gui_tools
 
 __all__ = [
     "SafetyGuard",

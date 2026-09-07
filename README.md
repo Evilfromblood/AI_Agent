@@ -1,50 +1,37 @@
-# JARVIS Desktop Assistant (Phase 1 & Phase 2)
+# JARVIS Desktop Assistant (Phases 1, 2 & 3.1)
 
-A modular, local-first "JARVIS"-style desktop assistant in Python designed for Windows and Linux. It pairs a **Primary Local Brain** (`gemma4:latest` via Ollama) with an **Online Supporting Brain** (Google Gemini 2.5 Flash via official `google-genai`), autonomous self-thinking (`Plan` -> `Critique` -> `Action`), stealth browser automation, and system telemetry tools.
+A modular, local-first "JARVIS"-style desktop assistant in Python designed for Windows and Linux. It pairs a **Primary Local Brain** (`gemma4:latest` via Ollama) with an **Online Supporting Brain** (Google Gemini 2.5 Flash via official `google-genai`), autonomous self-thinking (`Plan` -> `Critique` -> `Action`), stealth browser automation, system telemetry, and **Desktop GUI Automation & Screen Perception**.
 
 ---
 
-## Phase 2 Architecture: Hybrid Co-Pilot & Self-Thinking Engine
+## Architectural Overview
 
 ```
-                                  +-------------------+
-                                  |   User Prompt     |
-                                  +---------+---------+
-                                            |
-                                            v
-                              +---------------------------+
-                              |   Dual-Brain Router       |
-                              |  (Model Tier Coordinator) |
-                              +-------------+-------------+
-                                            |
-             +------------------------------+------------------------------+
-             |                                                             |
-             v                                                             v
-+---------------------------+                                 +---------------------------+
-| Primary Local Brain       |                                 | Online Supporting Brain   |
-| Gemma 4 (Local Ollama)    |                                 | Gemini 2.5 Flash          |
-| Fast, zero-cost, local PC |                                 | (High context, heavy code,|
-| operations & scrapers     |                                 | diagnostics & synthesis)  |
-+-------------+-------------+                                 +-------------+-------------+
-             |                                                             |
-             +------------------------------+------------------------------+
-                                            |
-                                            v
-                             +-----------------------------+
-                             |    Self-Thinking Engine     |
-                             |  - Plan & Decompose Tasks   |
-                             |  - Critique Tool Result     |
-                             |  - Auto-Escalate Failures   |
-                             +--------------+--------------+
-                                            |
-                                            v
-                             +-----------------------------+
-                             |     Phase 2 Toolset         |
-                             |  - System telemetry (psutil)|
-                             |  - App Launcher             |
-                             |  - Stealth Selenium         |
-                             |  - Bounded Scrapers         |
-                             +-----------------------------+
+                          +-------------------------+
+                          |   User Voice / Text     |
+                          +------------+------------+
+                                       |
+                                       v
+                          +-------------------------+
+                          |   Dual-Brain Router     |
+                          | (Local Gemma 4 / Gemini)|
+                          +------------+------------+
+                                       |
+                                       v
+                          +-------------------------+
+                          |  Self-Thinking Engine   |
+                          |  Plan, Critique, Adapt  |
+                          +------------+------------+
+                                       |
+        +------------------------------+------------------------------+
+        |                              |                              |
+        v                              v                              v
++---------------+              +---------------+              +---------------+
+| System Tools  |              | Browser Tools |              | GUI & Vision  |
+| - psutil      |              | - Stealth Chrome             | - mss Screen  |
+| - App Control |              | - JS Click Fallback          | - PyAutoGUI   |
+| - File Ops    |              | - Live DOM Soup              | - Gemini 2.5V |
++---------------+              +---------------+              +---------------+
 ```
 
 ---
@@ -53,61 +40,59 @@ A modular, local-first "JARVIS"-style desktop assistant in Python designed for W
 
 ```
 jolly-hawking/
-├── config.py                 # Pydantic configuration & Gemini settings
-├── main.py                   # CLI REPL & command dispatcher
-├── requirements.txt          # Python dependencies (Ollama, Gemini, Selenium, Psutil, etc.)
+├── config.py                 # Pydantic configuration (models, timeouts, hotkey guardrails)
+├── main.py                   # Interactive CLI REPL with /help, /tools, /copilot, /voice
+├── requirements.txt          # Dependencies (ollama, google-genai, selenium, psutil, pyautogui, mss, pillow)
 ├── agent/
-│   ├── llm_client.py         # Local Ollama + GeminiClientWrapper dual-brain router
-│   ├── prompts.py            # JARVIS persona & self-reflecting ReAct instructions (Plan/Critique)
-│   ├── react_parser.py       # Balanced JSON parser extracting Thought, Plan, Critique, Action
+│   ├── llm_client.py         # Dual-brain router: Ollama (gemma4) + GeminiClientWrapper (gemini-2.5-flash)
+│   ├── prompts.py            # JARVIS persona & self-reflecting ReAct loop (Plan & Critique)
+│   ├── react_parser.py       # Balanced JSON parser with token stripping (<channel|>, <end_of_turn>)
 │   └── core.py               # Orchestrator with consecutive tool failure escalation
 ├── tools/
-│   ├── registry.py           # Tool decorator, JSON Schema generator, and executor
-│   ├── guardrails.py         # Human-in-the-loop safety authorization for destructive actions
+│   ├── registry.py           # Central tool decorator, schema generator, and executor
+│   ├── guardrails.py         # Human-in-the-loop confirmation for destructive commands & hotkeys
 │   ├── file_tools.py         # list_directory, read_file, write_file, search_files, run_terminal_command
-│   ├── scraper_tools.py      # scrape_page_content (bounded payload), extract_links
-│   ├── browser_tools.py      # Singleton BrowserController, stealth Chrome, JS click fallback, wait_for_page_load
-│   └── system_tools.py       # get_system_stats, launch_application
+│   ├── scraper_tools.py      # scrape_page_content (bounded token budget), extract_links
+│   ├── browser_tools.py      # BrowserController: stealth Chrome, JS click fallback, wait_for_page_load
+│   ├── system_tools.py       # get_system_stats (CPU/RAM/Disk), launch_application
+│   └── gui_tools.py          # take_screenshot, analyze_screen_with_vision, click_screen_coordinate, type_screen_text, send_system_hotkey
 ├── voice/
-│   └── voice_input.py        # Speech-to-text handler with graceful degradation
+│   └── voice_input.py        # Audio capture handler with graceful library/hardware fallback
 └── tests/
-    ├── test_file_tools.py    # Tests for file operations & safety guardrails
-    ├── test_scraper_tools.py # Tests for web scraping & payload truncation
-    ├── test_browser_tools.py # Tests for BrowserController & Selenium
-    ├── test_system_tools.py  # Tests for system telemetry & app launching
-    └── test_agent_react.py   # Tests for ReAct parser, Plan/Critique, & Gemini escalation
+    ├── test_file_tools.py    # Unit tests for file ops & safety guardrails
+    ├── test_scraper_tools.py # Unit tests for web scraping & payload truncation
+    ├── test_browser_tools.py # Unit tests for BrowserController & Selenium
+    ├── test_system_tools.py  # Unit tests for hardware stats & application launcher
+    ├── test_gui_tools.py     # Unit tests for screen capture, PyAutoGUI, hotkeys, & vision grounding
+    └── test_agent_react.py   # Unit tests for ReAct parser, Plan/Critique, & Gemini escalation
 ```
 
 ---
 
-## Key Capabilities
+## Phase 3.1 Capabilities: Desktop GUI Automation & Screen Perception
 
-1. **Hybrid Dual-Brain Coordinator (`agent/llm_client.py`)**:
-   - **Local Driver**: `gemma4:latest` handles day-to-day commands with zero latency and complete privacy.
-   - **Cloud Co-Pilot**: Google Gemini 2.5 Flash via `google-genai`. If local actions fail consecutively or if complex diagnosis is needed, the assistant automatically routes context to Gemini.
-2. **Autonomous "Self-Thinking" Loop (`agent/prompts.py`, `agent/react_parser.py`, `agent/core.py`)**:
-   - **`Plan:`** 1-3 step roadmap before taking actions on complex objectives.
-   - **`Critique:`** Evaluates previous observation to diagnose failures or anomalies before choosing the next action.
-   - **Failure Auto-Escalation**: Consecutive failures on any tool automatically query the cloud co-pilot for a recovery strategy.
-3. **Stealth Browser Engine (`tools/browser_tools.py`)**:
-   - Injects anti-detection flags (`--disable-blink-features=AutomationControlled`, desktop user-agent, `excludeSwitches=["enable-automation"]`).
-   - JavaScript click fallback (`driver.execute_script("arguments[0].click();", elem)`) when click is intercepted by overlays.
-   - `wait_for_page_load()` for dynamic single-page applications.
-4. **System Telemetry & App Control (`tools/system_tools.py`)**:
-   - `get_system_stats()`: Live CPU usage %, core count, RAM utilization, and disk storage metrics via `psutil`.
-   - `launch_application(app_name)`: Launches approved desktop utilities (`notepad`, `calc`, `taskmgr`, `explorer`, `code`).
+1. **High-Speed Screen Capture (`mss` + `pillow`)**:
+   - `take_screenshot(filename, region)`: Multi-monitor hardware-accelerated screenshot capture with optional bounding box cropping.
+2. **Vision Grounding with Gemini 2.5 Flash**:
+   - `analyze_screen_with_vision(prompt, image_path)`: Uses `google-genai` to analyze desktop screenshots, detect active windows, extract text from dialogs, and estimate pixel coordinates `(x, y)` for buttons and UI elements.
+3. **Safe Mouse & Keyboard Control (`pyautogui`)**:
+   - `click_screen_coordinate(x, y, clicks, button)`: Mouse positioning with strict resolution boundary verification.
+   - `type_screen_text(text, press_enter, interval)`: Sequential character typing into active windows, gated by guardrails against malicious script injection.
+   - `send_system_hotkey(keys)`: Dispatches OS shortcuts (e.g. `["win", "r"]`, `["ctrl", "s"]`).
+4. **Safety Guardrails & Fail-Safe Protection**:
+   - `pyautogui.FAILSAFE = True` enabled globally: Slamming cursor into any screen corner immediately aborts running automation.
+   - Dangerous hotkeys (`alt+f4`, `win+l`, `ctrl+alt+del`, `win+x`) require explicit human confirmation (`Authorize? [y/N]: `).
 
 ---
 
-## Setup & Quick Start
+## Quick Start & Verification
 
 ### 1. Installation
 ```powershell
 pip install -r requirements.txt
 ```
 
-### 2. Configure Cloud Co-Pilot (Optional)
-Set your Google Gemini API key to activate the cloud supporting brain:
+### 2. Configure Cloud Co-Pilot & Vision (Optional)
 ```powershell
 $env:GEMINI_API_KEY="your-gemini-api-key"
 ```
@@ -117,26 +102,13 @@ $env:GEMINI_API_KEY="your-gemini-api-key"
 python main.py --status
 ```
 
-### 4. Interactive REPL
+### 4. Run Interactive Assistant
 ```powershell
 python main.py
 ```
 
-### REPL Commands
-- `/help` - Show available commands
-- `/tools` - List all registered tools (15 tools ready)
-- `/status` - Check Ollama, active model, and Gemini co-pilot status
-- `/copilot [prompt]` - Directly query the online Gemini co-pilot
-- `/model [name]` - Switch active local model
-- `/mode [react|native]` - Toggle execution mode
-- `/clear` - Reset conversation history and error counters
-- `/voice` - Activate voice recognition
-- `/exit` - Clean up browser and shut down
-
----
-
-## Running Automated Tests
+### 5. Automated Tests
 ```powershell
 pytest tests/ -v
 ```
-All **29/29** unit tests pass cleanly, covering file tools, guardrails, scraping, browser automation, system telemetry, and the self-reflecting ReAct loop.
+All **39/39** tests pass across all subsystems.
