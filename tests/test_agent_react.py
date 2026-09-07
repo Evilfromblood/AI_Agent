@@ -160,7 +160,8 @@ def test_react_parser_token_stripping():
 def test_gemini_wrapper_chat_mocked():
     from agent.llm_client import GeminiClientWrapper
 
-    wrapper = GeminiClientWrapper(api_key="mock_key", model="gemini-2.5-flash")
+    wrapper = GeminiClientWrapper(api_key="mock_key", model="gemini-3.6-flash")
+    assert wrapper.model == "gemini-3.6-flash"
     mock_genai_client = MagicMock()
     mock_resp = MagicMock()
     mock_resp.text = "Gemini Co-Pilot Response"
@@ -171,6 +172,10 @@ def test_gemini_wrapper_chat_mocked():
     assert result["role"] == "assistant"
     assert result["content"] == "Gemini Co-Pilot Response"
     mock_genai_client.models.generate_content.assert_called_once()
+
+    # Also verify default initialization picks up config.gemini_model
+    default_wrapper = GeminiClientWrapper(api_key="mock_key")
+    assert default_wrapper.model == "gemini-3.6-flash"
 
 
 def test_jarvis_agent_failure_escalation_to_gemini():

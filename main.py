@@ -155,7 +155,7 @@ def repl(agent: JarvisAgent, voice_handler: VoiceInputHandler) -> None:
                 elif cmd == "/copilot":
                     if agent.llm.gemini.is_available:
                         if arg:
-                            print(f"{Fore.LIGHTMAGENTA_EX}[Invoking Gemini 2.5 Flash Co-Pilot]...{Style.RESET_ALL}")
+                            print(f"{Fore.LIGHTMAGENTA_EX}[Invoking Gemini 3.6 Flash Co-Pilot]...{Style.RESET_ALL}")
                             ans = agent.llm.chat_online([{"role": "user", "content": arg}])
                             print(f"{Fore.MAGENTA}Gemini Co-Pilot:{Style.RESET_ALL} {ans.get('content')}")
                         else:

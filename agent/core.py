@@ -190,7 +190,7 @@ class JarvisAgent:
                         self._log(
                             "info",
                             f"Tool '{step.action}' failed {self.consecutive_tool_failures} times consecutively. "
-                            f"Escalating to Gemini 2.5 Flash co-pilot for failure diagnosis and strategy...",
+                            f"Escalating to Gemini 3.6 Flash co-pilot for failure diagnosis and strategy...",
                         )
                         diagnosis_prompt = [
                             *messages,

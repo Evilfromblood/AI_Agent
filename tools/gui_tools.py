@@ -88,7 +88,7 @@ def take_screenshot(filename: str = "workspace_screen.png", region: Optional[Lis
 @registry.register
 def analyze_screen_with_vision(prompt: str, image_path: str = "workspace_screen.png") -> str:
     """
-    Inspect a captured screenshot using Google Gemini 2.5 Flash multimodal vision grounding.
+    Inspect a captured screenshot using Google Gemini 3.6 Flash multimodal vision grounding.
     Returns detected UI elements, bounding coordinates, error dialog text, or active window states.
     :param prompt: Question or directive for the vision model (e.g. 'Find coordinates for the Submit button')
     :param image_path: Path to the image file to analyze

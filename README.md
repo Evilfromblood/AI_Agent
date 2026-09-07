@@ -1,6 +1,6 @@
 # JARVIS Desktop Assistant (Phases 1, 2 & 3.1)
 
-A modular, local-first "JARVIS"-style desktop assistant in Python designed for Windows and Linux. It pairs a **Primary Local Brain** (`gemma4:latest` via Ollama) with an **Online Supporting Brain** (Google Gemini 2.5 Flash via official `google-genai`), autonomous self-thinking (`Plan` -> `Critique` -> `Action`), stealth browser automation, system telemetry, and **Desktop GUI Automation & Screen Perception**.
+A modular, local-first "JARVIS"-style desktop assistant in Python designed for Windows and Linux. It pairs a **Primary Local Brain** (`gemma4:latest` via Ollama) with an **Online Supporting Brain** (Google Gemini 3.6 Flash via official `google-genai`), autonomous self-thinking (`Plan` -> `Critique` -> `Action`), stealth browser automation, system telemetry, and **Desktop GUI Automation & Screen Perception**.
 
 ---
 
@@ -30,7 +30,7 @@ A modular, local-first "JARVIS"-style desktop assistant in Python designed for W
 | System Tools  |              | Browser Tools |              | GUI & Vision  |
 | - psutil      |              | - Stealth Chrome             | - mss Screen  |
 | - App Control |              | - JS Click Fallback          | - PyAutoGUI   |
-| - File Ops    |              | - Live DOM Soup              | - Gemini 2.5V |
+| - File Ops    |              | - Live DOM Soup              | - Gemini 3.6V |
 +---------------+              +---------------+              +---------------+
 ```
 
@@ -44,7 +44,7 @@ jolly-hawking/
 ├── main.py                   # Interactive CLI REPL with /help, /tools, /copilot, /voice
 ├── requirements.txt          # Dependencies (ollama, google-genai, selenium, psutil, pyautogui, mss, pillow)
 ├── agent/
-│   ├── llm_client.py         # Dual-brain router: Ollama (gemma4) + GeminiClientWrapper (gemini-2.5-flash)
+│   ├── llm_client.py         # Dual-brain router: Ollama (gemma4) + GeminiClientWrapper (gemini-3.6-flash)
 │   ├── prompts.py            # JARVIS persona & self-reflecting ReAct loop (Plan & Critique)
 │   ├── react_parser.py       # Balanced JSON parser with token stripping (<channel|>, <end_of_turn>)
 │   └── core.py               # Orchestrator with consecutive tool failure escalation
@@ -73,7 +73,7 @@ jolly-hawking/
 
 1. **High-Speed Screen Capture (`mss` + `pillow`)**:
    - `take_screenshot(filename, region)`: Multi-monitor hardware-accelerated screenshot capture with optional bounding box cropping.
-2. **Vision Grounding with Gemini 2.5 Flash**:
+2. **Vision Grounding with Gemini 3.6 Flash**:
    - `analyze_screen_with_vision(prompt, image_path)`: Uses `google-genai` to analyze desktop screenshots, detect active windows, extract text from dialogs, and estimate pixel coordinates `(x, y)` for buttons and UI elements.
 3. **Safe Mouse & Keyboard Control (`pyautogui`)**:
    - `click_screen_coordinate(x, y, clicks, button)`: Mouse positioning with strict resolution boundary verification.

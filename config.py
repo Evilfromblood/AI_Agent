@@ -24,7 +24,7 @@ class AssistantConfig(BaseModel):
         description="Priority order of fallback models if target model is not present",
     )
 
-    # Online Supporting Brain (Cloud Co-Pilot: Gemini 2.5 Flash)
+    # Online Supporting Brain (Cloud Co-Pilot: Gemini 3.6 Flash)
     online_provider: str = Field(
         default="gemini",
         description="Online co-pilot LLM provider ('gemini' or 'openai')",
@@ -34,7 +34,7 @@ class AssistantConfig(BaseModel):
         description="API key for Google Gemini",
     )
     gemini_model: str = Field(
-        default="gemini-2.5-flash",
+        default="gemini-3.6-flash",
         description="Cloud Gemini model for complex reasoning and failure diagnostics",
     )
     enable_online_fallback: bool = Field(

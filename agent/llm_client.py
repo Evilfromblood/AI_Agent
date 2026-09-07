@@ -18,7 +18,7 @@ from config import config
 
 
 class GeminiClientWrapper:
-    """Wrapper for Google Gemini 2.5 Flash via official google-genai SDK."""
+    """Wrapper for Google Gemini 3.6 Flash via official google-genai SDK."""
 
     def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
         self.api_key = api_key or config.gemini_api_key
