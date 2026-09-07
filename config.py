@@ -116,6 +116,29 @@ class AssistantConfig(BaseModel):
         description="System shortcut combinations requiring explicit confirmation",
     )
 
+    # Ambient Voice & Speech Settings (Phase 3.2)
+    voice_enabled: bool = Field(
+        default=False,
+        description="Enable continuous ambient voice loop mode on startup",
+    )
+    tts_voice: str = Field(
+        default="en-US-ChristopherNeural",
+        description="Microsoft Edge TTS voice model for natural speech synthesis",
+    )
+    wake_word: str = Field(
+        default="hey jarvis",
+        description="Wake-word trigger phrase for continuous listening",
+    )
+    listen_timeout: int = Field(
+        default=6,
+        description="Microphone listening silence timeout in seconds",
+    )
+    phrase_time_limit: int = Field(
+        default=10,
+        description="Maximum continuous duration in seconds for spoken phrases",
+    )
+
+
 
 # Singleton default configuration
 config = AssistantConfig()

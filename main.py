@@ -21,6 +21,7 @@ from config import config
 from tools.browser_tools import browser_controller
 from tools.registry import registry
 from voice.voice_input import VoiceInputHandler
+from voice.voice_manager import VoiceManager, voice_manager
 
 init(autoreset=True)
 
@@ -70,6 +71,7 @@ def print_help() -> None:
     print("  /mode [type]  - Switch execution mode ('react' or 'native')")
     print("  /clear        - Clear conversation history")
     print("  /voice        - Trigger voice input recognition")
+    print("  /speak [text] - Synthesize speech using neural TTS")
     print("  /copilot      - Check or invoke online Gemini co-pilot")
     print("  /exit, /quit  - Exit JARVIS\n")
 
@@ -99,8 +101,9 @@ def run_demo(agent: JarvisAgent) -> None:
     print(f"\n{Fore.GREEN}=== Demo Complete ==={Style.RESET_ALL}\n")
 
 
-def repl(agent: JarvisAgent, voice_handler: VoiceInputHandler) -> None:
+def repl(agent: JarvisAgent, vm: Optional[VoiceManager] = None, voice_mode: bool = False) -> None:
     """Interactive Read-Eval-Print-Loop."""
+    vm = vm or voice_manager
     print(BANNER)
     print_status(agent.llm, agent.mode)
     print(f"Type your request, use {Fore.CYAN}/help{Style.RESET_ALL} for commands, or type {Fore.CYAN}/exit{Style.RESET_ALL} to quit.\n")
@@ -120,6 +123,7 @@ def repl(agent: JarvisAgent, voice_handler: VoiceInputHandler) -> None:
                 if cmd in ("/exit", "/quit"):
                     print(f"\n{Fore.CYAN}Shutting down JARVIS. Have a good day, sir.{Style.RESET_ALL}")
                     browser_controller.close_browser()
+                    vm.stop_speech()
                     sys.exit(0)
                 elif cmd == "/help":
                     print_help()
@@ -145,13 +149,21 @@ def repl(agent: JarvisAgent, voice_handler: VoiceInputHandler) -> None:
                         print(f"Current model: {agent.llm.resolve_model()}")
                         print(f"Available models: {', '.join(models)}")
                 elif cmd == "/voice":
-                    if voice_handler.is_available:
-                        spoken = voice_handler.listen_and_transcribe()
+                    if vm.is_stt_available:
+                        spoken = vm.listen_once()
                         if spoken:
                             print(f"{Fore.CYAN}User (Spoken) > {Style.RESET_ALL}{spoken}")
-                            agent.run(spoken)
+                            ans = agent.run(spoken)
+                            if ans:
+                                vm.speak(ans)
                     else:
                         print(f"{Fore.YELLOW}Voice input is unavailable on this machine. Type query directly.{Style.RESET_ALL}")
+                elif cmd == "/speak":
+                    if arg:
+                        print(f"{Fore.MAGENTA}[JARVIS Speaking]...{Style.RESET_ALL}")
+                        vm.speak(arg)
+                    else:
+                        print("Usage: /speak <text to say>")
                 elif cmd == "/copilot":
                     if agent.llm.gemini.is_available:
                         if arg:
@@ -167,14 +179,31 @@ def repl(agent: JarvisAgent, voice_handler: VoiceInputHandler) -> None:
                 continue
 
             # Execute user prompt through agent
-            agent.run(prompt)
+            response = agent.run(prompt)
+            if voice_mode or config.voice_enabled:
+                if response:
+                    vm.speak(response)
 
         except (KeyboardInterrupt, EOFError):
             print(f"\n\n{Fore.CYAN}Session interrupted. Shutting down JARVIS.{Style.RESET_ALL}")
             browser_controller.close_browser()
+            vm.stop_speech()
             break
         except Exception as e:
             print(f"\n{Fore.RED}An unexpected error occurred: {e}{Style.RESET_ALL}")
+
+
+def run_ambient_voice_mode(agent: JarvisAgent, vm: VoiceManager) -> None:
+    """Continuous hands-free ambient voice loop."""
+    print(BANNER)
+    print_status(agent.llm, agent.mode)
+
+    def on_voice_command(command: str):
+        response = agent.run(command)
+        if response:
+            vm.speak(response, non_blocking=False)
+
+    vm.listen_continuous(callback_fn=on_voice_command)
 
 
 def main() -> None:
@@ -185,11 +214,12 @@ def main() -> None:
     parser.add_argument("--host", type=str, default=None, help="Ollama API host URL")
     parser.add_argument("--status", action="store_true", help="Print system status and exit")
     parser.add_argument("--demo", action="store_true", help="Run automated capabilities demonstration")
+    parser.add_argument("--voice", action="store_true", help="Start in continuous ambient voice loop mode")
     args = parser.parse_args()
 
     llm = LLMClient(host=args.host, model=args.model)
     agent = JarvisAgent(llm_client=llm, mode=args.mode)
-    voice_handler = VoiceInputHandler()
+    vm = voice_manager
 
     if args.status:
         print(BANNER)
@@ -202,7 +232,10 @@ def main() -> None:
         run_demo(agent)
         sys.exit(0)
 
-    repl(agent, voice_handler)
+    if args.voice or config.voice_enabled:
+        run_ambient_voice_mode(agent, vm)
+    else:
+        repl(agent, vm, voice_mode=args.voice)
 
 
 if __name__ == "__main__":
