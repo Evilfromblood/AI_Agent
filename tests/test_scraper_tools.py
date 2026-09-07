@@ -85,3 +85,18 @@ def test_extract_links(mock_get):
     links = extract_links("https://test.example.com")
     assert "https://example.com/docs" in links
     assert "https://test.example.com/relative/path" in links
+
+
+@patch("tools.scraper_tools.requests.get")
+def test_scrape_page_content_truncation(mock_get):
+    large_html = f"<html><body><main><p>{'A' * 5000}</p></main></body></html>"
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.text = large_html
+    mock_resp.raise_for_status = MagicMock()
+    mock_get.return_value = mock_resp
+
+    result = scrape_page_content("https://large.example.com")
+    assert "... [Truncated for token budget]" in result["content"]
+    # Check that content length before suffix is bounded
+    assert len(result["content"]) <= 3500 + len("\n... [Truncated for token budget]")

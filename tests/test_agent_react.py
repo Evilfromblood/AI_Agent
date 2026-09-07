@@ -107,3 +107,25 @@ def test_jarvis_agent_react_execution_flow():
     assert answer == "Directory listing complete."
     assert mock_llm.chat.call_count == 2
     assert len(agent.conversation_history) == 2
+
+
+def test_llm_client_options_and_empty_fallback():
+    client = LLMClient(model="test_model")
+    client.client = MagicMock()
+
+    # Mock empty response from ollama
+    mock_msg = MagicMock()
+    mock_msg.content = ""
+    mock_msg.tool_calls = []
+    mock_resp = MagicMock()
+    mock_resp.message = mock_msg
+    client.client.chat.return_value = mock_resp
+
+    res = client.chat(messages=[{"role": "user", "content": "hi"}])
+    # Verify num_ctx: 8192 was sent
+    call_kwargs = client.client.chat.call_args.kwargs
+    assert call_kwargs["options"]["num_ctx"] == 8192
+    assert call_kwargs["options"]["temperature"] == 0.2
+
+    # Verify empty response was caught and fallback returned
+    assert "empty response" in res["content"].lower()

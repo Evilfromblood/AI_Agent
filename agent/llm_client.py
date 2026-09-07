@@ -110,10 +110,15 @@ class LLMClient:
         payload = {
             "model": active_model,
             "messages": messages,
-            "options": {"temperature": temperature},
+            "options": {
+                "num_ctx": 8192,
+                "temperature": temperature,
+            },
         }
         if tools:
             payload["tools"] = tools
+
+        empty_fallback = "[Model returned an empty response. Please retry or rephrase your prompt.]"
 
         try:
             response = self.client.chat(**payload)
@@ -134,22 +139,29 @@ class LLMClient:
                     elif isinstance(tc, dict):
                         normalized_calls.append(tc)
 
+                raw_content = getattr(msg, "content", "") or ""
+                final_content = raw_content if (raw_content.strip() or normalized_calls) else empty_fallback
+
                 return {
                     "role": "assistant",
-                    "content": getattr(msg, "content", "") or "",
+                    "content": final_content,
                     "tool_calls": normalized_calls,
                 }
             elif isinstance(response, dict):
                 msg = response.get("message", {})
+                tool_calls = msg.get("tool_calls", []) or []
+                raw_content = msg.get("content", "") or ""
+                final_content = raw_content if (raw_content.strip() or tool_calls) else empty_fallback
                 return {
                     "role": "assistant",
-                    "content": msg.get("content", "") or "",
-                    "tool_calls": msg.get("tool_calls", []) or [],
+                    "content": final_content,
+                    "tool_calls": tool_calls,
                 }
             else:
+                raw_content = str(response).strip()
                 return {
                     "role": "assistant",
-                    "content": str(response),
+                    "content": raw_content or empty_fallback,
                     "tool_calls": [],
                 }
         except Exception as e:

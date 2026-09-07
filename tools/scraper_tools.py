@@ -59,6 +59,9 @@ def _format_soup_to_markdown(soup: BeautifulSoup) -> str:
     return cleaned[:8000]  # Cap length to prevent context explosion
 
 
+MAX_SCRAPE_CHARS = 3500
+
+
 @registry.register
 def scrape_page_content(url: str) -> Dict[str, Any]:
     """
@@ -82,13 +85,19 @@ def scrape_page_content(url: str) -> Dict[str, Any]:
         _clean_soup(soup)
 
         # Convert to clean markdown text
-        markdown_text = _format_soup_to_markdown(soup)
+        markdown_content = _format_soup_to_markdown(soup)
+
+        # Enforce strict character ceiling for context window safety
+        if len(markdown_content) > MAX_SCRAPE_CHARS:
+            markdown_content = (
+                markdown_content[:MAX_SCRAPE_CHARS] + "\n... [Truncated for token budget]"
+            )
 
         return {
             "title": title,
             "url": url,
             "status_code": response.status_code,
-            "content": markdown_text,
+            "content": markdown_content,
         }
     except requests.RequestException as re_err:
         return {
