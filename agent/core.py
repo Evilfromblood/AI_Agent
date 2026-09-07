@@ -37,6 +37,8 @@ class JarvisAgent:
         self.verbose = verbose
         self.log_callback = log_callback
         self.conversation_history: List[Dict[str, Any]] = []
+        self.consecutive_tool_failures: int = 0
+        self.last_failed_tool: Optional[str] = None
 
     def _log(self, channel: str, message: str) -> None:
         """Log message with color and invoke external callback if present."""
@@ -48,6 +50,10 @@ class JarvisAgent:
 
         if channel == "thought":
             print(f"{Fore.CYAN}Thought:{Style.RESET_ALL} {message}")
+        elif channel == "plan":
+            print(f"{Fore.BLUE}Plan:{Style.RESET_ALL} {message}")
+        elif channel == "critique":
+            print(f"{Fore.LIGHTRED_EX}Critique:{Style.RESET_ALL} {message}")
         elif channel == "action":
             print(f"{Fore.YELLOW}Action:{Style.RESET_ALL} {message}")
         elif channel == "action_input":
@@ -60,11 +66,13 @@ class JarvisAgent:
         elif channel == "error":
             print(f"{Fore.RED}Error:{Style.RESET_ALL} {message}")
         elif channel == "info":
-            print(f"{Fore.BLUE}[INFO]{Style.RESET_ALL} {message}")
+            print(f"{Fore.LIGHTMAGENTA_EX}[CO-PILOT INFO]{Style.RESET_ALL} {message}")
 
     def reset(self) -> None:
-        """Clear conversation history."""
+        """Clear conversation history and error counters."""
         self.conversation_history.clear()
+        self.consecutive_tool_failures = 0
+        self.last_failed_tool = None
 
     def run(self, user_prompt: str) -> str:
         """
@@ -78,7 +86,7 @@ class JarvisAgent:
     def _run_react_loop(self, user_prompt: str) -> str:
         """
         Execute iterative ReAct loop:
-        Thought -> Action -> Action Input -> Observation -> ... -> Final Answer
+        Thought -> Plan -> Critique -> Action -> Action Input -> Observation -> ... -> Final Answer
         """
         tool_descriptions = registry.get_react_descriptions()
         tool_names = registry.list_tool_names()
@@ -106,6 +114,10 @@ class JarvisAgent:
 
             if step.thought:
                 self._log("thought", step.thought)
+            if step.plan:
+                self._log("plan", step.plan)
+            if step.critique:
+                self._log("critique", step.critique)
 
             # Check for final answer
             if step.is_final or step.final_answer:
@@ -113,6 +125,7 @@ class JarvisAgent:
                 self._log("final_answer", final_text)
                 self.conversation_history.append({"role": "user", "content": user_prompt})
                 self.conversation_history.append({"role": "assistant", "content": final_text})
+                self.consecutive_tool_failures = 0
                 return final_text
 
             # Execute tool action
@@ -127,9 +140,62 @@ class JarvisAgent:
 
                 self._log("observation", observation)
 
+                # Check for failure to trigger error-critique & co-pilot escalation
+                is_failure = (
+                    observation.strip().lower().startswith("error")
+                    or "security guardrail interception" in observation.lower()
+                    or "failed to fetch" in observation.lower()
+                )
+
+                if is_failure:
+                    self.consecutive_tool_failures += 1
+                    self.last_failed_tool = step.action
+
+                    # Escalate to online Gemini co-pilot if failure threshold reached
+                    if (
+                        self.consecutive_tool_failures >= config.consecutive_failure_threshold
+                        and config.enable_online_fallback
+                        and self.llm.gemini.is_available
+                    ):
+                        self._log(
+                            "info",
+                            f"Tool '{step.action}' failed {self.consecutive_tool_failures} times consecutively. "
+                            f"Escalating to Gemini 2.5 Flash co-pilot for failure diagnosis and strategy...",
+                        )
+                        diagnosis_prompt = [
+                            *messages,
+                            {
+                                "role": "user",
+                                "content": (
+                                    f"ESCALATION: Action '{step.action}' failed consecutively with observation:\n"
+                                    f"{observation}\n"
+                                    f"Diagnose the cause of this failure and provide a 1-sentence Critique "
+                                    f"and an adjusted Plan/Action."
+                                ),
+                            },
+                        ]
+                        copilot_resp = self.llm.chat_online(diagnosis_prompt)
+                        advice = copilot_resp.get("content", "").strip()
+                        if advice:
+                            self._log("info", f"Gemini Co-Pilot Guidance:\n{advice}")
+                            messages.append(
+                                {"role": "assistant", "content": f"Critique (from Co-Pilot): {advice}"}
+                            )
+                else:
+                    self.consecutive_tool_failures = 0
+                    self.last_failed_tool = None
+
                 # Feed observation back into ReAct trajectory
-                assistant_message = f"Thought: {step.thought}\nAction: {step.action}\nAction Input: {step.action_input}"
-                messages.append({"role": "assistant", "content": assistant_message})
+                assistant_parts = []
+                if step.thought:
+                    assistant_parts.append(f"Thought: {step.thought}")
+                if step.plan:
+                    assistant_parts.append(f"Plan: {step.plan}")
+                if step.critique:
+                    assistant_parts.append(f"Critique: {step.critique}")
+                assistant_parts.append(f"Action: {step.action}\nAction Input: {step.action_input}")
+
+                messages.append({"role": "assistant", "content": "\n".join(assistant_parts)})
                 messages.append({"role": "user", "content": f"Observation: {observation}"})
             else:
                 # No action and no final answer found, treat as final text
@@ -137,6 +203,7 @@ class JarvisAgent:
                 self._log("final_answer", final_text)
                 self.conversation_history.append({"role": "user", "content": user_prompt})
                 self.conversation_history.append({"role": "assistant", "content": final_text})
+                self.consecutive_tool_failures = 0
                 return final_text
 
         fallback_final = "Reached maximum step limit without a definitive final answer."

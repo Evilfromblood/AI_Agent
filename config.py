@@ -2,14 +2,15 @@
 Configuration settings for the local JARVIS desktop assistant.
 """
 
-from typing import List
+import os
+from typing import List, Optional
 from pydantic import BaseModel, Field
 
 
 class AssistantConfig(BaseModel):
     """Central configuration for JARVIS assistant."""
 
-    # Ollama settings
+    # Ollama settings (Local Primary Brain)
     ollama_base_url: str = Field(
         default="http://localhost:11434",
         description="Local Ollama API endpoint base URL",
@@ -21,6 +22,28 @@ class AssistantConfig(BaseModel):
     fallback_models: List[str] = Field(
         default_factory=lambda: ["gemma4:12b", "gemma3:4b", "gemma3:12b", "glm-4.7-flash:latest"],
         description="Priority order of fallback models if target model is not present",
+    )
+
+    # Online Supporting Brain (Cloud Co-Pilot: Gemini 2.5 Flash)
+    online_provider: str = Field(
+        default="gemini",
+        description="Online co-pilot LLM provider ('gemini' or 'openai')",
+    )
+    gemini_api_key: Optional[str] = Field(
+        default_factory=lambda: os.getenv("GEMINI_API_KEY") or os.getenv("ONLINE_API_KEY"),
+        description="API key for Google Gemini",
+    )
+    gemini_model: str = Field(
+        default="gemini-2.5-flash",
+        description="Cloud Gemini model for complex reasoning and failure diagnostics",
+    )
+    enable_online_fallback: bool = Field(
+        default=True,
+        description="Enable automatic escalation to online co-pilot when local tool errors persist",
+    )
+    consecutive_failure_threshold: int = Field(
+        default=2,
+        description="Consecutive tool failures before escalating to online co-pilot",
     )
 
     # Execution limits

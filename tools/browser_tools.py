@@ -66,6 +66,7 @@ class BrowserController:
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--window-size=1920,1080")
+        chrome_options.add_argument(f"user-agent={DEFAULT_HEADERS['User-Agent']}")
         chrome_options.add_argument("--disable-blink-features=AutomationControlled")
         chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
         chrome_options.add_experimental_option("useAutomationExtension", False)
@@ -97,9 +98,23 @@ class BrowserController:
         except Exception as e:
             return f"Error opening URL '{url}': {str(e)}"
 
+    def wait_for_page_load(self, timeout: int = 5) -> str:
+        """Wait for page readyState to be complete and dynamic DOM to settle."""
+        driver = self._ensure_driver()
+        import time
+        try:
+            WebDriverWait(driver, timeout).until(
+                lambda d: d.execute_script("return document.readyState") == "complete"
+            )
+            time.sleep(0.5)  # Brief settling pause for SPA re-rendering
+            return f"Page loaded successfully. Current URL: {driver.current_url}"
+        except Exception as e:
+            return f"Wait for page load finished: {str(e)}"
+
     def click_element(self, by: str, selector: str) -> str:
         """
         Click on an element matching selector. Supports 'css', 'xpath', 'id', 'name', 'class', 'tag'.
+        Falls back to JavaScript click if standard click is intercepted.
         """
         by_key = by.strip().lower()
         if by_key not in BY_MAP:
@@ -112,10 +127,20 @@ class BrowserController:
             wait = WebDriverWait(driver, 10)
             elem = wait.until(EC.element_to_be_clickable((by_type, selector)))
             driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", elem)
-            elem.click()
+            try:
+                elem.click()
+            except Exception:
+                # JavaScript click fallback for intercepted elements or overlays
+                driver.execute_script("arguments[0].click();", elem)
+
             return f"Successfully clicked element '{selector}' (using {by}). Current URL: {driver.current_url}"
         except Exception as e:
-            return f"Error clicking element '{selector}' (by={by}): {str(e)}"
+            # Final attempt via JS query selector if element wasn't clickable directly
+            try:
+                driver.execute_script(f"document.querySelector('{selector}').click();")
+                return f"Successfully clicked element '{selector}' via JS fallback. Current URL: {driver.current_url}"
+            except Exception:
+                return f"Error clicking element '{selector}' (by={by}): {str(e)}"
 
     def type_text(self, by: str, selector: str, text: str, press_enter: bool = False) -> str:
         """
@@ -227,6 +252,16 @@ def get_browser_page_content() -> Dict[str, Any]:
     :return: Dictionary containing title, url, and content
     """
     return browser_controller.get_clean_page_content()
+
+
+@registry.register
+def wait_for_page_load(timeout: int = 5) -> str:
+    """
+    Wait for the currently opened browser tab to finish loading dynamic scripts and DOM.
+    :param timeout: Maximum seconds to wait (default: 5)
+    :return: Status message
+    """
+    return browser_controller.wait_for_page_load(timeout=timeout)
 
 
 @registry.register

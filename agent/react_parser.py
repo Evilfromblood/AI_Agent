@@ -13,6 +13,8 @@ from typing import Any, Dict, Optional
 class ReActStep:
     """Represents a parsed step from the ReAct cycle."""
     thought: str = ""
+    plan: Optional[str] = None
+    critique: Optional[str] = None
     action: Optional[str] = None
     action_input: Optional[Dict[str, Any]] = None
     final_answer: Optional[str] = None
@@ -23,6 +25,22 @@ class ReActStep:
 
 class ReActParser:
     """Extracts and cleans ReAct structure from model responses."""
+
+    @staticmethod
+    def _strip_special_tokens(text: str) -> str:
+        """Remove LLM special markers like <channel|>, <end_of_turn>, etc."""
+        special_tokens = [
+            r"<channel\|>",
+            r"<end_of_turn>",
+            r"<start_of_turn>",
+            r"<\|im_end\|>",
+            r"<\|im_start\|>",
+            r"<\|eot_id\|>",
+        ]
+        cleaned = text
+        for token in special_tokens:
+            cleaned = re.sub(token, "", cleaned, flags=re.IGNORECASE)
+        return cleaned
 
     @staticmethod
     def _clean_json_str(text: str) -> str:
@@ -77,31 +95,42 @@ class ReActParser:
         """
         Parse raw LLM response text into a ReActStep.
         """
-        step = ReActStep(raw_output=text)
+        cleaned_text = cls._strip_special_tokens(text)
+        step = ReActStep(raw_output=cleaned_text)
 
         # 1. Check for Final Answer
-        final_answer_match = re.search(r"Final Answer\s*:\s*(.*)", text, re.DOTALL | re.IGNORECASE)
-        if final_answer_match and ("Action:" not in text or text.index("Final Answer") > text.index("Action:")):
+        final_answer_match = re.search(r"Final Answer\s*:\s*(.*)", cleaned_text, re.DOTALL | re.IGNORECASE)
+        if final_answer_match and ("Action:" not in cleaned_text or cleaned_text.index("Final Answer") > cleaned_text.index("Action:")):
             step.is_final = True
             step.final_answer = final_answer_match.group(1).strip()
             # Extract preceding thought if any
-            thought_match = re.search(r"Thought\s*:\s*(.*?)(?=Final Answer|$)", text, re.DOTALL | re.IGNORECASE)
+            thought_match = re.search(r"Thought\s*:\s*(.*?)(?=Plan\s*:|Critique\s*:|Final Answer|$)", cleaned_text, re.DOTALL | re.IGNORECASE)
             if thought_match:
                 step.thought = thought_match.group(1).strip()
             return step
 
         # 2. Extract Thought
-        thought_match = re.search(r"Thought\s*:\s*(.*?)(?=Action\s*:|Final Answer\s*:|$)", text, re.DOTALL | re.IGNORECASE)
+        thought_match = re.search(r"Thought\s*:\s*(.*?)(?=Plan\s*:|Critique\s*:|Action\s*:|Final Answer\s*:|$)", cleaned_text, re.DOTALL | re.IGNORECASE)
         if thought_match:
             step.thought = thought_match.group(1).strip()
 
-        # 3. Extract Action
-        action_match = re.search(r"Action\s*:\s*([a-zA-Z0-9_\-\.]+)", text, re.IGNORECASE)
+        # 3. Extract Plan (Phase 2)
+        plan_match = re.search(r"Plan\s*:\s*(.*?)(?=Critique\s*:|Action\s*:|Final Answer\s*:|$)", cleaned_text, re.DOTALL | re.IGNORECASE)
+        if plan_match:
+            step.plan = plan_match.group(1).strip()
+
+        # 4. Extract Critique (Phase 2)
+        critique_match = re.search(r"Critique\s*:\s*(.*?)(?=Plan\s*:|Action\s*:|Final Answer\s*:|$)", cleaned_text, re.DOTALL | re.IGNORECASE)
+        if critique_match:
+            step.critique = critique_match.group(1).strip()
+
+        # 5. Extract Action
+        action_match = re.search(r"Action\s*:\s*([a-zA-Z0-9_\-\.]+)", cleaned_text, re.IGNORECASE)
         if action_match:
             step.action = action_match.group(1).strip()
 
-        # 4. Extract Action Input
-        input_match = re.search(r"Action Input\s*:\s*(.*)", text, re.DOTALL | re.IGNORECASE)
+        # 6. Extract Action Input
+        input_match = re.search(r"Action Input\s*:\s*(.*)", cleaned_text, re.DOTALL | re.IGNORECASE)
         if input_match:
             raw_input = input_match.group(1).strip()
 
@@ -109,6 +138,8 @@ class ReActParser:
             cutoff_patterns = [
                 r"(?:<[^>]+>|\s)*Observation\s*:",
                 r"\n\s*Thought\s*:",
+                r"\n\s*Plan\s*:",
+                r"\n\s*Critique\s*:",
                 r"\n\s*Final Answer\s*:",
             ]
             for cp in cutoff_patterns:
@@ -145,7 +176,7 @@ class ReActParser:
                 step.final_answer = step.thought
                 step.is_final = True
             else:
-                step.final_answer = text.strip()
+                step.final_answer = cleaned_text.strip()
                 step.is_final = True
 
         return step

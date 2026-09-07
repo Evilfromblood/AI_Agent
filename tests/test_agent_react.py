@@ -129,3 +129,86 @@ def test_llm_client_options_and_empty_fallback():
 
     # Verify empty response was caught and fallback returned
     assert "empty response" in res["content"].lower()
+
+
+def test_react_parser_plan_and_critique():
+    text = """
+    Thought: Need to analyze system load.
+    Plan: 1. Get system metrics. 2. Compare against threshold.
+    Critique: Previous scraper attempt timed out, pivoting to system tools.
+    Action: get_system_stats
+    Action Input: {}
+    """
+    step = ReActParser.parse(text)
+    assert not step.is_final
+    assert step.thought == "Need to analyze system load."
+    assert "1. Get system metrics" in step.plan
+    assert "Previous scraper attempt timed out" in step.critique
+    assert step.action == "get_system_stats"
+    assert step.action_input == {}
+
+
+def test_react_parser_token_stripping():
+    text = "<start_of_turn>Thought: Checking files.<channel|>Plan: List current folder.<end_of_turn>Action: list_directory\nAction Input: {}\n<|im_end|>"
+    step = ReActParser.parse(text)
+    assert "<start_of_turn>" not in step.raw_output
+    assert "<channel|>" not in step.raw_output
+    assert "<end_of_turn>" not in step.raw_output
+    assert step.action == "list_directory"
+
+
+def test_gemini_wrapper_chat_mocked():
+    from agent.llm_client import GeminiClientWrapper
+
+    wrapper = GeminiClientWrapper(api_key="mock_key", model="gemini-2.5-flash")
+    mock_genai_client = MagicMock()
+    mock_resp = MagicMock()
+    mock_resp.text = "Gemini Co-Pilot Response"
+    mock_genai_client.models.generate_content.return_value = mock_resp
+    wrapper._client = mock_genai_client
+
+    result = wrapper.chat([{"role": "user", "content": "Explain quantum entanglement"}])
+    assert result["role"] == "assistant"
+    assert result["content"] == "Gemini Co-Pilot Response"
+    mock_genai_client.models.generate_content.assert_called_once()
+
+
+def test_jarvis_agent_failure_escalation_to_gemini():
+    mock_llm = MagicMock(spec=LLMClient)
+    mock_llm.gemini = MagicMock()
+    mock_llm.gemini.is_available = True
+
+    # Simulate:
+    # Turn 1: Try read_file -> Error
+    # Turn 2: Try read_file -> Error (triggers failure escalation to chat_online)
+    # Turn 3: Conclude with final answer
+    mock_llm.chat.side_effect = [
+        {
+            "role": "assistant",
+            "content": "Thought: Reading file.\nAction: read_file\nAction Input: {\"filepath\": \"non_existent_file.xyz\"}",
+            "tool_calls": [],
+        },
+        {
+            "role": "assistant",
+            "content": "Thought: Retrying read.\nAction: read_file\nAction Input: {\"filepath\": \"non_existent_file.xyz\"}",
+            "tool_calls": [],
+        },
+        {
+            "role": "assistant",
+            "content": "Thought: Moving on.\nFinal Answer: Task aborted safely.",
+            "tool_calls": [],
+        },
+    ]
+
+    mock_llm.chat_online.return_value = {
+        "role": "assistant",
+        "content": "File does not exist. Suggest using search_files or list_directory first.",
+        "tool_calls": [],
+    }
+
+    agent = JarvisAgent(llm_client=mock_llm, mode="react", verbose=False)
+    final_ans = agent.run("Find my notes")
+
+    assert final_ans == "Task aborted safely."
+    # chat_online should have been invoked for escalation
+    mock_llm.chat_online.assert_called_once()

@@ -8,6 +8,7 @@ from tools.registry import ToolRegistry, registry
 import tools.file_tools
 import tools.scraper_tools
 import tools.browser_tools
+import tools.system_tools
 
 __all__ = [
     "SafetyGuard",

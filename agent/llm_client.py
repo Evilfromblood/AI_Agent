@@ -7,17 +7,110 @@ from typing import Any, Dict, List, Optional
 import ollama
 import requests
 
+try:
+    from google import genai
+    from google.genai import types
+    HAS_GENAI = True
+except ImportError:
+    HAS_GENAI = False
+
 from config import config
 
 
-class LLMClient:
-    """Client for local Ollama inference."""
+class GeminiClientWrapper:
+    """Wrapper for Google Gemini 2.5 Flash via official google-genai SDK."""
 
-    def __init__(self, host: Optional[str] = None, model: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
+        self.api_key = api_key or config.gemini_api_key
+        self.model = model or config.gemini_model
+        self._client = None
+
+    @property
+    def client(self):
+        if self._client is None and HAS_GENAI:
+            key = self.api_key or config.gemini_api_key
+            if key:
+                try:
+                    self._client = genai.Client(api_key=key)
+                except Exception:
+                    self._client = None
+        return self._client
+
+    @property
+    def is_available(self) -> bool:
+        return HAS_GENAI and bool(self.api_key or config.gemini_api_key)
+
+    def chat(
+        self,
+        messages: List[Dict[str, Any]],
+        temperature: float = 0.2,
+    ) -> Dict[str, Any]:
+        """Send chat request to Gemini co-pilot."""
+        if not HAS_GENAI:
+            return {
+                "role": "assistant",
+                "content": "[google-genai package is not installed. Install with `pip install google-genai`.]",
+                "tool_calls": [],
+            }
+
+        client = self.client
+        if not client:
+            return {
+                "role": "assistant",
+                "content": "[Gemini API key not configured. Please set GEMINI_API_KEY environment variable to enable cloud co-pilot.]",
+                "tool_calls": [],
+            }
+
+        try:
+            system_instruction = None
+            conversation_parts = []
+
+            for msg in messages:
+                role = msg.get("role")
+                content = msg.get("content", "")
+                if role == "system":
+                    system_instruction = content
+                elif role == "user":
+                    conversation_parts.append(f"User: {content}")
+                elif role == "assistant":
+                    conversation_parts.append(f"Assistant: {content}")
+                elif role == "tool":
+                    conversation_parts.append(f"Observation ({msg.get('name', 'tool')}): {content}")
+
+            prompt_text = "\n\n".join(conversation_parts)
+
+            config_kwargs = {"temperature": temperature}
+            if system_instruction:
+                config_kwargs["system_instruction"] = system_instruction
+
+            resp = client.models.generate_content(
+                model=self.model,
+                contents=prompt_text,
+                config=types.GenerateContentConfig(**config_kwargs),
+            )
+            text_out = resp.text or ""
+            return {
+                "role": "assistant",
+                "content": text_out.strip(),
+                "tool_calls": [],
+            }
+        except Exception as e:
+            return {
+                "role": "assistant",
+                "content": f"[Gemini Online Brain Error: {str(e)}]",
+                "tool_calls": [],
+            }
+
+
+class LLMClient:
+    """Client for local Ollama inference with optional cloud Gemini co-pilot."""
+
+    def __init__(self, host: Optional[str] = None, model: Optional[str] = None, gemini_key: Optional[str] = None):
         self.host = host or config.ollama_base_url
         self.client = ollama.Client(host=self.host)
         self.selected_model = model
         self.available_models: List[str] = []
+        self.gemini = GeminiClientWrapper(api_key=gemini_key)
 
     def check_connection(self) -> bool:
         """Verify if Ollama instance is reachable."""
@@ -91,21 +184,34 @@ class LLMClient:
         self.selected_model = available[0]
         return self.selected_model
 
+    def chat_online(
+        self,
+        messages: List[Dict[str, Any]],
+        temperature: float = 0.2,
+    ) -> Dict[str, Any]:
+        """Send chat request directly to the online Gemini co-pilot."""
+        return self.gemini.chat(messages, temperature=temperature)
+
     def chat(
         self,
         messages: List[Dict[str, Any]],
         tools: Optional[List[Dict[str, Any]]] = None,
         model: Optional[str] = None,
         temperature: float = 0.2,
+        use_online: bool = False,
     ) -> Dict[str, Any]:
         """
-        Send chat completion request to local Ollama.
+        Send chat completion request to local Ollama (or cloud Gemini if use_online=True).
         :param messages: List of chat messages [{"role": "...", "content": "..."}]
         :param tools: Optional list of tool definitions for native tool calling
         :param model: Optional override model
         :param temperature: Generation temperature
+        :param use_online: Whether to force routing to online Gemini co-pilot
         :return: Response dictionary containing 'message' and 'tool_calls'
         """
+        if use_online:
+            return self.chat_online(messages, temperature=temperature)
+
         active_model = model or self.resolve_model()
         payload = {
             "model": active_model,
@@ -165,6 +271,10 @@ class LLMClient:
                     "tool_calls": [],
                 }
         except Exception as e:
+            # Fallback to online brain if enabled and available
+            if config.enable_online_fallback and self.gemini.is_available:
+                return self.chat_online(messages, temperature=temperature)
+
             return {
                 "role": "assistant",
                 "content": f"[Error connecting to Ollama at {self.host} with model {active_model}: {str(e)}]",

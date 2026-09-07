@@ -30,7 +30,7 @@ BANNER = f"""{Fore.CYAN}
   _ | | /_\\ | _ \\\\ \\ / /|_ _|/ __|
  | || |/ _ \\|   / \\ V /  | | \\__ \\
   \\__//_/ \\_\\_|_\\  \\_/  |___||___/
-{Fore.LIGHTBLACK_EX} Local Desktop Assistant | Phase 1: Core Agent & Automation{Fore.CYAN}
+{Fore.LIGHTBLACK_EX} Local Desktop Assistant | Phase 2: Hybrid Co-Pilot & Self-Thinking{Fore.CYAN}
 ================================================================{Style.RESET_ALL}
 """
 
@@ -41,18 +41,23 @@ def print_status(llm: LLMClient, agent_mode: str) -> None:
     status_color = Fore.GREEN if connected else Fore.RED
     status_text = "CONNECTED" if connected else "OFFLINE"
 
-    print("\n" + "-" * 55)
-    print(f" Ollama Endpoint : {config.ollama_base_url} [{status_color}{status_text}{Style.RESET_ALL}]")
+    gemini_ready = llm.gemini.is_available
+    gemini_color = Fore.GREEN if gemini_ready else Fore.YELLOW
+    gemini_status = f"READY ({config.gemini_model})" if gemini_ready else "NOT CONFIGURED (set GEMINI_API_KEY)"
+
+    print("\n" + "-" * 60)
+    print(f" Ollama Endpoint  : {config.ollama_base_url} [{status_color}{status_text}{Style.RESET_ALL}]")
     if connected:
         active_model = llm.resolve_model()
         available = llm.list_models()
-        print(f" Active Model    : {Fore.YELLOW}{active_model}{Style.RESET_ALL}")
-        print(f" Available Models: {', '.join(available) if available else 'None detected'}")
+        print(f" Primary Brain    : {Fore.YELLOW}{active_model}{Style.RESET_ALL} (Local Ollama)")
+        print(f" Available Models : {', '.join(available) if available else 'None detected'}")
     else:
-        print(f" Active Model    : {Fore.YELLOW}{config.target_model}{Style.RESET_ALL} (Ollama offline)")
-    print(f" Execution Mode  : {Fore.MAGENTA}{agent_mode.upper()}{Style.RESET_ALL}")
-    print(f" Registered Tools: {len(registry.list_tool_names())} tools ready")
-    print("-" * 55 + "\n")
+        print(f" Primary Brain    : {Fore.YELLOW}{config.target_model}{Style.RESET_ALL} (Ollama offline)")
+    print(f" Online Co-Pilot  : [{gemini_color}{gemini_status}{Style.RESET_ALL}]")
+    print(f" Execution Mode   : {Fore.MAGENTA}{agent_mode.upper()}{Style.RESET_ALL} (Self-Thinking ReAct)")
+    print(f" Registered Tools : {len(registry.list_tool_names())} tools ready")
+    print("-" * 60 + "\n")
 
 
 def print_help() -> None:
@@ -65,6 +70,7 @@ def print_help() -> None:
     print("  /mode [type]  - Switch execution mode ('react' or 'native')")
     print("  /clear        - Clear conversation history")
     print("  /voice        - Trigger voice input recognition")
+    print("  /copilot      - Check or invoke online Gemini co-pilot")
     print("  /exit, /quit  - Exit JARVIS\n")
 
 
@@ -146,6 +152,16 @@ def repl(agent: JarvisAgent, voice_handler: VoiceInputHandler) -> None:
                             agent.run(spoken)
                     else:
                         print(f"{Fore.YELLOW}Voice input is unavailable on this machine. Type query directly.{Style.RESET_ALL}")
+                elif cmd == "/copilot":
+                    if agent.llm.gemini.is_available:
+                        if arg:
+                            print(f"{Fore.LIGHTMAGENTA_EX}[Invoking Gemini 2.5 Flash Co-Pilot]...{Style.RESET_ALL}")
+                            ans = agent.llm.chat_online([{"role": "user", "content": arg}])
+                            print(f"{Fore.MAGENTA}Gemini Co-Pilot:{Style.RESET_ALL} {ans.get('content')}")
+                        else:
+                            print(f"{Fore.GREEN}Online Co-Pilot is active ({config.gemini_model}). Type '/copilot <prompt>' to query directly.{Style.RESET_ALL}")
+                    else:
+                        print(f"{Fore.YELLOW}Online Co-Pilot is not configured. Set GEMINI_API_KEY environment variable.{Style.RESET_ALL}")
                 else:
                     print(f"Unknown command '{cmd}'. Type /help for options.")
                 continue

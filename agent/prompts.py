@@ -15,27 +15,29 @@ When executing tasks:
 """
 
 REACT_INSTRUCTIONS = """
-To complete user tasks, you MUST use a structured ReAct (Reasoning + Action) format.
+To complete user tasks, you MUST use an autonomous self-reflecting ReAct (Reasoning + Planning + Critique + Action) format.
 You have access to the following tools:
 
 {tool_descriptions}
 
-Use the following strict format:
+Use the following structured format:
 
 Question: the input request you must solve
 Thought: your reasoning about what step to take next
+Plan: (optional) brief 1-3 step roadmap when a task requires multiple steps
+Critique: (optional) evaluation of previous observation, diagnosing failures, errors, or unexpected DOM/file states
 Action: the name of the tool to use (MUST be one of [{tool_names}])
 Action Input: a valid JSON dictionary containing the tool arguments (e.g. {{"filepath": "test.txt"}})
 Observation: the result of executing the tool (this will be provided to you by the system)
-... (this Thought/Action/Action Input/Observation sequence can repeat multiple times)
+... (this sequence can repeat multiple times)
 Thought: I have gathered all necessary information or completed the action
 Final Answer: the definitive, clear answer or summary for the user
 
 RULES:
 1. Every Action MUST be immediately followed by 'Action Input:' on the next line with valid JSON arguments.
-2. Do NOT invent tool names. Only use tools listed above.
-3. When you have the final answer or the task is finished, emit 'Final Answer:'.
-4. If a tool reports an error, analyze the error in your next Thought and try a corrected approach.
+2. If a tool fails or returns an error, use 'Critique:' to diagnose why it failed and formulate an adapted approach before choosing the next action.
+3. Do NOT invent tool names. Only use tools listed above.
+4. When you have the final answer or the task is finished, emit 'Final Answer:'.
 """
 
 
