@@ -212,3 +212,99 @@ def test_jarvis_agent_failure_escalation_to_gemini():
     assert final_ans == "Task aborted safely."
     # chat_online should have been invoked for escalation
     mock_llm.chat_online.assert_called_once()
+
+
+def test_react_prompt_critical_rule_present():
+    prompt = build_system_prompt("tool descriptions here", ["tool1", "tool2"])
+    expected_rule = (
+        "CRITICAL: If the user request requires interacting with the system "
+        "(getting stats, launching apps, typing, clicking, reading/writing files), "
+        "you MUST output an `Action:` block first. You are STRICTLY FORBIDDEN from "
+        "reporting results or stating an action was performed unless you have "
+        "received the corresponding tool `Observation:` in the loop."
+    )
+    assert expected_rule in prompt
+
+
+def test_tool_execution_bypass_interception_final_answer():
+    mock_llm = MagicMock(spec=LLMClient)
+    # Turn 1: Premature Final Answer without tool execution (hallucinating stats)
+    # Turn 2: Follows system reminder and outputs Action
+    # Turn 3: Returns Final Answer with verified data
+    mock_llm.chat.side_effect = [
+        {
+            "role": "assistant",
+            "content": "Thought: I will provide the CPU stats.\nFinal Answer: CPU is 12% and memory is 45%.",
+            "tool_calls": [],
+        },
+        {
+            "role": "assistant",
+            "content": "Thought: I need to call get_system_stats.\nAction: get_system_stats\nAction Input: {}",
+            "tool_calls": [],
+        },
+        {
+            "role": "assistant",
+            "content": "Thought: Observation received.\nFinal Answer: Verified CPU is 8.2%.",
+            "tool_calls": [],
+        },
+    ]
+
+    agent = JarvisAgent(llm_client=mock_llm, mode="react", verbose=False)
+    final_ans = agent.run("Get my system stats")
+
+    assert final_ans == "Verified CPU is 8.2%."
+    assert mock_llm.chat.call_count == 3
+    # Check that the second call received the interception reminder
+    second_call_messages = mock_llm.chat.call_args_list[1].kwargs["messages"]
+    reminder_present = any(
+        "You answered without executing required tools. Output an Action block to execute the first step."
+        in m.get("content", "")
+        for m in second_call_messages
+    )
+    assert reminder_present
+
+
+def test_tool_execution_bypass_interception_direct_response():
+    mock_llm = MagicMock(spec=LLMClient)
+    # Turn 1: Raw text without Action or Final Answer prefix
+    # Turn 2: Follows system reminder and outputs Action
+    # Turn 3: Final Answer
+    mock_llm.chat.side_effect = [
+        {
+            "role": "assistant",
+            "content": "I launched Notepad and typed hello for you.",
+            "tool_calls": [],
+        },
+        {
+            "role": "assistant",
+            "content": "Thought: Executing tool.\nAction: launch_application\nAction Input: {\"app_name\": \"notepad\"}",
+            "tool_calls": [],
+        },
+        {
+            "role": "assistant",
+            "content": "Final Answer: Notepad launched successfully.",
+            "tool_calls": [],
+        },
+    ]
+
+    agent = JarvisAgent(llm_client=mock_llm, mode="react", verbose=False)
+    final_ans = agent.run("Open notepad and write hello")
+
+    assert final_ans == "Notepad launched successfully."
+    assert mock_llm.chat.call_count == 3
+
+
+def test_non_tool_prompt_not_intercepted():
+    mock_llm = MagicMock(spec=LLMClient)
+    mock_llm.chat.return_value = {
+        "role": "assistant",
+        "content": "Final Answer: Paris is the capital of France.",
+        "tool_calls": [],
+    }
+
+    agent = JarvisAgent(llm_client=mock_llm, mode="react", verbose=False)
+    final_ans = agent.run("What is the capital of France?")
+
+    assert final_ans == "Paris is the capital of France."
+    assert mock_llm.chat.call_count == 1
+

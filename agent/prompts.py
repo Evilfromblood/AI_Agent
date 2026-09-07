@@ -34,10 +34,11 @@ Thought: I have gathered all necessary information or completed the action
 Final Answer: the definitive, clear answer or summary for the user
 
 RULES:
-1. Every Action MUST be immediately followed by 'Action Input:' on the next line with valid JSON arguments.
-2. If a tool fails or returns an error, use 'Critique:' to diagnose why it failed and formulate an adapted approach before choosing the next action.
-3. Do NOT invent tool names. Only use tools listed above.
-4. When you have the final answer or the task is finished, emit 'Final Answer:'.
+1. CRITICAL: If the user request requires interacting with the system (getting stats, launching apps, typing, clicking, reading/writing files), you MUST output an `Action:` block first. You are STRICTLY FORBIDDEN from reporting results or stating an action was performed unless you have received the corresponding tool `Observation:` in the loop.
+2. Every Action MUST be immediately followed by 'Action Input:' on the next line with valid JSON arguments.
+3. If a tool fails or returns an error, use 'Critique:' to diagnose why it failed and formulate an adapted approach before choosing the next action.
+4. Do NOT invent tool names. Only use tools listed above.
+5. When you have the final answer or the task is finished, emit 'Final Answer:'.
 """
 
 

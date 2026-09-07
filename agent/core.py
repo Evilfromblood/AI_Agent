@@ -14,6 +14,19 @@ from tools.registry import registry
 
 init(autoreset=True)
 
+TOOL_KEYWORDS = {
+    "stats",
+    "screenshot",
+    "notepad",
+    "launch",
+    "write",
+    "open",
+    "click",
+    "type",
+    "hotkey",
+    "read",
+}
+
 
 class JarvisAgent:
     """Autonomous desktop assistant agent orchestrating tools and LLM inference."""
@@ -102,6 +115,11 @@ class JarvisAgent:
 
         messages.append({"role": "user", "content": f"Question: {user_prompt}"})
 
+        tools_executed = 0
+        intercepted_bypass = False
+        prompt_lower = user_prompt.lower()
+        has_tool_keyword = any(kw in prompt_lower for kw in TOOL_KEYWORDS)
+
         for step_idx in range(1, config.max_react_steps + 1):
             response = self.llm.chat(messages=messages, temperature=0.2)
             raw_text = response.get("content", "").strip()
@@ -119,6 +137,17 @@ class JarvisAgent:
             if step.critique:
                 self._log("critique", step.critique)
 
+            # Intercept premature final answer or direct response without tool execution
+            if not step.action and tools_executed == 0 and not intercepted_bypass and has_tool_keyword:
+                intercepted_bypass = True
+                self._log("info", "Tool execution bypass intercepted. Re-prompting for Action block.")
+                messages.append({"role": "assistant", "content": raw_text})
+                messages.append({
+                    "role": "user",
+                    "content": "You answered without executing required tools. Output an Action block to execute the first step.",
+                })
+                continue
+
             # Check for final answer
             if step.is_final or step.final_answer:
                 final_text = step.final_answer or step.thought
@@ -130,6 +159,7 @@ class JarvisAgent:
 
             # Execute tool action
             if step.action:
+                tools_executed += 1
                 self._log("action", step.action)
                 self._log("action_input", str(step.action_input or {}))
 
