@@ -31,7 +31,7 @@ BANNER = f"""{Fore.CYAN}
   _ | | /_\\ | _ \\\\ \\ / /|_ _|/ __|
  | || |/ _ \\|   / \\ V /  | | \\__ \\
   \\__//_/ \\_\\_|_\\  \\_/  |___||___/
-{Fore.LIGHTBLACK_EX} Local Desktop Assistant | Phase 3: Ambient Intelligence & GUI Action Engine{Fore.CYAN}
+{Fore.LIGHTBLACK_EX} Local Desktop Assistant | Phase 4: Floating HUD & System Tray Hub{Fore.CYAN}
 ================================================================{Style.RESET_ALL}
 """
 
@@ -206,6 +206,32 @@ def run_ambient_voice_mode(agent: JarvisAgent, vm: VoiceManager) -> None:
     vm.listen_continuous(callback_fn=on_voice_command)
 
 
+def run_hud_mode(agent: JarvisAgent, vm: VoiceManager) -> None:
+    """Launch the floating HUD and system tray daemon."""
+    from ui.floating_hud import JarvisFloatingHUD
+    from ui.app_controller import AppController
+    from ui.tray_manager import TrayManager
+
+    controller = AppController(agent=agent, vm=vm)
+    hud = JarvisFloatingHUD(controller=controller)
+    controller.set_hud(hud)
+
+    tray = TrayManager(controller=controller)
+    controller.set_tray_manager(tray)
+    tray.start()
+
+    print(BANNER)
+    print_status(agent.llm, agent.mode)
+    print(f"{Fore.GREEN}[HUD Mode Active] Press Alt+Space to toggle HUD, Esc to hide.{Style.RESET_ALL}\n")
+
+    try:
+        hud.mainloop()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        controller.shutdown()
+
+
 def main() -> None:
     """Main CLI entrypoint."""
     parser = argparse.ArgumentParser(description="JARVIS Local Desktop Assistant")
@@ -215,6 +241,7 @@ def main() -> None:
     parser.add_argument("--status", action="store_true", help="Print system status and exit")
     parser.add_argument("--demo", action="store_true", help="Run automated capabilities demonstration")
     parser.add_argument("--voice", action="store_true", help="Start in continuous ambient voice loop mode")
+    parser.add_argument("--hud", action="store_true", help="Launch in dedicated floating HUD and system tray mode")
     args = parser.parse_args()
 
     llm = LLMClient(host=args.host, model=args.model)
@@ -232,10 +259,13 @@ def main() -> None:
         run_demo(agent)
         sys.exit(0)
 
-    if args.voice or config.voice_enabled:
+    if args.hud:
+        run_hud_mode(agent, vm)
+    elif args.voice or config.voice_enabled:
         run_ambient_voice_mode(agent, vm)
     else:
         repl(agent, vm, voice_mode=args.voice)
+
 
 
 if __name__ == "__main__":

@@ -19,3 +19,6 @@ pyttsx3>=2.90
 sounddevice>=0.4.6
 numpy>=1.26.0
 scipy>=1.11.0
+customtkinter>=5.2.0
+pystray>=0.19.5
+keyboard>=0.13.5
