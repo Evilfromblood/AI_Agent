@@ -29,11 +29,11 @@
     html, body {
       background: transparent !important;
       margin: 0;
-      padding: 0;
-      height: 100vh;
+      padding: 12px;
       overflow: hidden;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
       user-select: none;
+      box-sizing: border-box;
     }
 
     /* Glassmorphism card container */
@@ -44,6 +44,7 @@
       border: 1px solid rgba(6, 182, 212, 0.3);
       box-shadow: 0 0 35px rgba(6, 182, 212, 0.18), 0 25px 50px -12px rgba(0, 0, 0, 0.7);
     }
+
 
     /* Subtle ambient pulsing cyan glow */
     .cyan-glow {
@@ -111,10 +112,11 @@
     }
   </style>
 </head>
-<body class="p-3 flex justify-center items-start">
+<body class="m-0 p-3 overflow-hidden bg-transparent">
 
   <!-- Main Floating HUD Card -->
-  <div id="hud-container" class="glass-card w-full max-w-3xl rounded-2xl p-4 flex flex-col gap-3 text-slate-200 transition-all duration-300">
+  <div id="hud-container" class="glass-card w-full rounded-2xl p-4 flex flex-col gap-3 text-slate-200 transition-all duration-300">
+
     
     <!-- Header / Drag Bar -->
     <div class="pywebview-drag-region flex items-center justify-between border-b border-cyan-500/20 pb-2.5">
@@ -472,16 +474,43 @@
       isFirstLog = true;
       reactDrawer.open = false;
       clearOutputViews();
+      setTimeout(notifyContentHeight, 40);
     };
 
     window.focusInput = function() {
       queryInput.focus();
     };
 
+    // Dynamically notify Python backend to resize the pywebview window to wrap the card snugly
+    function notifyContentHeight() {
+      const card = document.getElementById('hud-container');
+      if (!card) return;
+      // card height + 24px body padding (12px top + 12px bottom) + 4px allowance
+      const targetHeight = Math.ceil(card.offsetHeight + 28);
+      apiCall('resize_window', targetHeight);
+    }
+
+    if (window.ResizeObserver) {
+      const observer = new ResizeObserver(() => {
+        notifyContentHeight();
+      });
+      window.addEventListener('DOMContentLoaded', () => {
+        const container = document.getElementById('hud-container');
+        if (container) observer.observe(container);
+        setTimeout(notifyContentHeight, 50);
+      });
+    }
+
+    reactDrawer.addEventListener('toggle', () => {
+      setTimeout(notifyContentHeight, 30);
+    });
+
     // Auto-focus on load
     window.addEventListener('DOMContentLoaded', () => {
       queryInput.focus();
+      setTimeout(notifyContentHeight, 80);
     });
   </script>
+
 </body>
 </html>

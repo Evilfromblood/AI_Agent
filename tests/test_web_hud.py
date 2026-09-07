@@ -199,3 +199,25 @@ def test_web_hud_create_window_valid_color():
     assert window.transparent is True
     assert window.background_color == "#000000"
 
+
+def test_web_hud_api_resize_window():
+    """Verify WebHUDAPI.resize_window calls window.resize with clamped bounds."""
+    mock_agent = MagicMock(spec=JarvisAgent)
+    api = WebHUDAPI(agent=mock_agent)
+    mock_window = MagicMock()
+    mock_window.width = 760
+    api.set_window(mock_window)
+
+    # Test within range
+    api.resize_window(350)
+    mock_window.resize.assert_called_with(760, 350)
+
+    # Test lower bound clamp
+    api.resize_window(100)
+    mock_window.resize.assert_called_with(760, 200)
+
+    # Test upper bound clamp
+    api.resize_window(900)
+    mock_window.resize.assert_called_with(760, 680)
+
+

@@ -183,6 +183,16 @@ class WebHUDAPI:
         else:
             self.show_window()
 
+    def resize_window(self, new_height: int) -> None:
+        """Dynamically resize window height to hug the HUD card content."""
+        if not self.window:
+            return
+        try:
+            clamped_h = max(200, min(int(new_height), 680))
+            self.window.resize(self.window.width, clamped_h)
+        except Exception:
+            pass
+
     def exit_app(self) -> None:
         """Shutdown helper for tray and window."""
         try:
@@ -216,8 +226,8 @@ class WebHUD:
         self,
         agent: JarvisAgent,
         vm: Optional[VoiceManager] = None,
-        width: int = 820,
-        height: int = 620,
+        width: int = 760,
+        height: int = 220,
         hotkey: str = "alt+space",
     ):
         self.agent = agent
@@ -225,6 +235,7 @@ class WebHUD:
         self.width = width
         self.height = height
         self.hotkey = hotkey
+
 
         self.api = WebHUDAPI(agent=self.agent, vm=self.vm)
         self.window: Optional[webview.Window] = None
