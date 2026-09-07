@@ -181,3 +181,21 @@ def test_web_hud_position_calculation():
     assert isinstance(pos_y, int)
     assert pos_x >= 0
     assert pos_y >= 0
+
+
+def test_web_hud_create_window_valid_color():
+    """Verify webview.create_window succeeds with #000000 hex color and transparent=True without ValueError."""
+    import webview
+    # Ensure background_color="#000000" and transparent=True does not raise ValueError
+    window = webview.create_window(
+        title="JARVIS Test Window",
+        html="<div>test</div>",
+        frameless=True,
+        on_top=True,
+        transparent=True,
+        background_color="#000000",
+    )
+    assert window is not None
+    assert window.transparent is True
+    assert window.background_color == "#000000"
+

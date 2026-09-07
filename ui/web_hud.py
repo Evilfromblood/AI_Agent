@@ -267,7 +267,7 @@ class WebHUD:
             transparent=True,
             easy_drag=True,
             shadow=True,
-            background_color="#00000000",
+            background_color="#000000",
         )
         self.api.set_window(self.window)
 
