@@ -207,29 +207,18 @@ def run_ambient_voice_mode(agent: JarvisAgent, vm: VoiceManager) -> None:
 
 
 def run_hud_mode(agent: JarvisAgent, vm: VoiceManager) -> None:
-    """Launch the floating HUD and system tray daemon."""
-    from ui.floating_hud import JarvisFloatingHUD
-    from ui.app_controller import AppController
-    from ui.tray_manager import TrayManager
-
-    controller = AppController(agent=agent, vm=vm)
-    hud = JarvisFloatingHUD(controller=controller)
-    controller.set_hud(hud)
-
-    tray = TrayManager(controller=controller)
-    controller.set_tray_manager(tray)
-    tray.start()
+    """Launch the modern PyWebView floating HUD and system tray daemon."""
+    from ui.web_hud import run_web_hud
 
     print(BANNER)
     print_status(agent.llm, agent.mode)
-    print(f"{Fore.GREEN}[HUD Mode Active] Press Alt+Space to toggle HUD, Esc to hide.{Style.RESET_ALL}\n")
+    print(f"{Fore.GREEN}[PyWebView HUD Active] Press Alt+Space to toggle HUD, Esc to hide.{Style.RESET_ALL}\n")
 
     try:
-        hud.mainloop()
+        run_web_hud(agent=agent, vm=vm)
     except KeyboardInterrupt:
         pass
-    finally:
-        controller.shutdown()
+
 
 
 def main() -> None:

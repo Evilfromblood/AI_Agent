@@ -6,5 +6,14 @@ Provides CustomTkinter floating HUD, background system tray hub, and asynchronou
 from ui.floating_hud import JarvisFloatingHUD
 from ui.app_controller import AppController
 from ui.tray_manager import TrayManager
+from ui.web_hud import WebHUD, WebHUDAPI, run_web_hud
 
-__all__ = ["JarvisFloatingHUD", "AppController", "TrayManager"]
+__all__ = [
+    "JarvisFloatingHUD",
+    "AppController",
+    "TrayManager",
+    "WebHUD",
+    "WebHUDAPI",
+    "run_web_hud",
+]
+

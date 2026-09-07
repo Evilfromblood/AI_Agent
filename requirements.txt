@@ -22,3 +22,4 @@ scipy>=1.11.0
 customtkinter>=5.2.0
 pystray>=0.19.5
 keyboard>=0.13.5
+pywebview>=6.0.0

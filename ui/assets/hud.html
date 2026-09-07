@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JARVIS Floating HUD</title>
+  <!-- Tailwind CSS CDN with embedded fallback styles -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            jarvis: {
+              cyan: '#00E5FF',
+              glow: '#06B6D4',
+              dark: '#0B0F19',
+              slate: '#1E293B',
+              card: 'rgba(11, 15, 25, 0.90)',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* Desktop transparency base */
+    html, body {
+      background: transparent !important;
+      margin: 0;
+      padding: 0;
+      height: 100vh;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      user-select: none;
+    }
+
+    /* Glassmorphism card container */
+    .glass-card {
+      background: rgba(11, 15, 25, 0.90);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(6, 182, 212, 0.3);
+      box-shadow: 0 0 35px rgba(6, 182, 212, 0.18), 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+    }
+
+    /* Subtle ambient pulsing cyan glow */
+    .cyan-glow {
+      box-shadow: 0 0 15px rgba(0, 229, 255, 0.25);
+    }
+    .cyan-glow-hover:hover {
+      box-shadow: 0 0 20px rgba(0, 229, 255, 0.45);
+    }
+
+    /* Custom dark scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.6);
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(6, 182, 212, 0.4);
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(0, 229, 255, 0.7);
+    }
+
+    /* PyWebview drag region for moving the frameless window */
+    .pywebview-drag-region {
+      -webkit-app-region: drag;
+      cursor: move;
+    }
+    .no-drag {
+      -webkit-app-region: no-drag;
+      cursor: auto;
+    }
+
+    /* Formatted Markdown styling */
+    .markdown-body pre {
+      background: #070a12;
+      border: 1px solid #1e293b;
+      border-radius: 6px;
+      padding: 10px;
+      font-family: Consolas, monospace;
+      font-size: 12px;
+      overflow-x: auto;
+      margin: 8px 0;
+    }
+    .markdown-body code {
+      background: #1e293b;
+      color: #38bdf8;
+      padding: 2px 5px;
+      border-radius: 4px;
+      font-family: Consolas, monospace;
+      font-size: 12px;
+    }
+    .markdown-body ul {
+      list-style-type: disc;
+      padding-left: 20px;
+      margin: 6px 0;
+    }
+    .markdown-body li {
+      margin-bottom: 4px;
+    }
+    .markdown-body strong {
+      color: #f8fafc;
+    }
+  </style>
+</head>
+<body class="p-3 flex justify-center items-start">
+
+  <!-- Main Floating HUD Card -->
+  <div id="hud-container" class="glass-card w-full max-w-3xl rounded-2xl p-4 flex flex-col gap-3 text-slate-200 transition-all duration-300">
+    
+    <!-- Header / Drag Bar -->
+    <div class="pywebview-drag-region flex items-center justify-between border-b border-cyan-500/20 pb-2.5">
+      <div class="flex items-center gap-2.5">
+        <!-- Arc-Reactor Glowing Pulse Icon -->
+        <div class="relative flex items-center justify-center w-6 h-6">
+          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-50"></span>
+          <span class="relative inline-flex rounded-full h-4 w-4 bg-cyan-500 shadow-[0_0_10px_#00e5ff]"></span>
+        </div>
+        <span class="text-sm font-semibold tracking-wider text-cyan-400 uppercase">JARVIS Assistant</span>
+      </div>
+
+      <div class="flex items-center gap-2 no-drag">
+        <!-- Status Indicator Pill -->
+        <div id="status-pill" class="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-800 text-slate-400 border border-slate-700">
+          <span id="status-dot" class="w-2 h-2 rounded-full bg-slate-400"></span>
+          <span id="status-text">IDLE</span>
+        </div>
+        <!-- Window Controls -->
+        <button onclick="apiCall('hide_window')" title="Hide (Esc)" class="text-slate-400 hover:text-rose-400 text-sm p-1 rounded transition">✕</button>
+      </div>
+    </div>
+
+    <!-- Search Input Command Bar -->
+    <div class="flex items-center gap-2">
+      <div class="relative flex-1">
+        <input
+          id="query-input"
+          type="text"
+          placeholder="Ask JARVIS, control system, or type command... (Enter to submit, Esc to hide)"
+          class="w-full bg-slate-900/90 text-slate-100 text-sm placeholder-slate-500 rounded-xl px-4 py-3 pr-10 border border-cyan-500/30 focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 focus:outline-none transition-all"
+          autocomplete="off"
+        />
+        <button
+          onclick="submitInputQuery()"
+          class="absolute right-2 top-1/2 -translate-y-1/2 text-cyan-400 hover:text-cyan-300 p-1.5 rounded-lg hover:bg-slate-800 transition"
+          title="Submit (Enter)"
+        >
+          ➔
+        </button>
+      </div>
+    </div>
+
+    <!-- Interactive Action Pills -->
+    <div class="flex flex-wrap items-center gap-2 text-xs font-medium no-drag">
+      <button onclick="apiCall('trigger_voice')" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-400 border border-emerald-700/40 hover:border-emerald-500 transition">
+        <span>🎙️</span>
+        <span>Voice Query</span>
+      </button>
+
+      <button onclick="apiCall('trigger_vision')" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-950/60 hover:bg-sky-900/80 text-sky-400 border border-sky-700/40 hover:border-sky-500 transition">
+        <span>👁️</span>
+        <span>Screen Vision</span>
+      </button>
+
+      <button onclick="apiCall('trigger_stats')" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-950/60 hover:bg-purple-900/80 text-purple-400 border border-purple-700/40 hover:border-purple-500 transition">
+        <span>📊</span>
+        <span>Telemetry</span>
+      </button>
+
+      <button onclick="apiCall('clear_history')" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800/70 hover:bg-slate-700 text-slate-400 border border-slate-700/50 hover:text-slate-200 transition">
+        <span>🗑️</span>
+        <span>Clear</span>
+      </button>
+
+      <div class="ml-auto text-[11px] text-slate-500 hidden sm:block">
+        <kbd class="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700">Alt</kbd> + <kbd class="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700">Space</kbd> toggle
+      </div>
+    </div>
+
+    <!-- Live ReAct Execution Stream (Collapsible Details) -->
+    <details id="react-drawer" class="group bg-slate-950/70 border border-slate-800/80 rounded-xl overflow-hidden transition-all duration-300">
+      <summary class="flex items-center justify-between px-3 py-2 text-xs font-medium text-slate-400 hover:text-cyan-300 cursor-pointer select-none bg-slate-900/40">
+        <span class="flex items-center gap-2">
+          <span id="react-spinner" class="inline-block w-2.5 h-2.5 rounded-full bg-cyan-400"></span>
+          <span>Live ReAct Reasoning & Execution Log</span>
+        </span>
+        <span class="text-slate-500 group-open:rotate-180 transition-transform">▼</span>
+      </summary>
+      <div id="react-log-stream" class="p-3 text-xs font-mono max-h-48 overflow-y-auto space-y-1.5 text-slate-300 border-t border-slate-800/50">
+        <div class="text-slate-500 italic">No actions executed yet.</div>
+      </div>
+    </details>
+
+    <!-- Telemetry Metric Gauges (Rendered dynamically on system stats) -->
+    <div id="telemetry-gauges" class="hidden grid-cols-3 gap-2.5 p-3 rounded-xl bg-slate-950/60 border border-slate-800/80">
+      <!-- CPU Gauge -->
+      <div class="flex flex-col gap-1">
+        <div class="flex justify-between text-xs font-medium text-slate-400">
+          <span>CPU Load</span>
+          <span id="gauge-cpu-val" class="text-cyan-400 font-mono">0%</span>
+        </div>
+        <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+          <div id="gauge-cpu-bar" class="bg-cyan-400 h-full rounded-full transition-all duration-500" style="width: 0%"></div>
+        </div>
+      </div>
+      <!-- RAM Gauge -->
+      <div class="flex flex-col gap-1">
+        <div class="flex justify-between text-xs font-medium text-slate-400">
+          <span>RAM Used</span>
+          <span id="gauge-ram-val" class="text-purple-400 font-mono">0%</span>
+        </div>
+        <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+          <div id="gauge-ram-bar" class="bg-purple-400 h-full rounded-full transition-all duration-500" style="width: 0%"></div>
+        </div>
+      </div>
+      <!-- Disk Gauge -->
+      <div class="flex flex-col gap-1">
+        <div class="flex justify-between text-xs font-medium text-slate-400">
+          <span>Disk Used</span>
+          <span id="gauge-disk-val" class="text-emerald-400 font-mono">0%</span>
+        </div>
+        <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+          <div id="gauge-disk-bar" class="bg-emerald-400 h-full rounded-full transition-all duration-500" style="width: 0%"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Assistant Response Viewport -->
+    <div id="response-container" class="hidden flex-col gap-1.5 p-3.5 rounded-xl bg-slate-900/70 border border-slate-800/80 max-h-64 overflow-y-auto">
+      <div class="text-xs font-bold text-cyan-400 flex items-center gap-1.5">
+        <span>🤖</span>
+        <span>JARVIS RESPONSE</span>
+      </div>
+      <div id="response-content" class="markdown-body text-sm leading-relaxed text-slate-200">
+        <!-- Rendered markdown response placed here -->
+      </div>
+    </div>
+
+  </div>
+
+  <!-- JavaScript Application Logic & Python Bridge -->
+  <script>
+    const queryInput = document.getElementById('query-input');
+    const statusPill = document.getElementById('status-pill');
+    const statusDot = document.getElementById('status-dot');
+    const statusText = document.getElementById('status-text');
+    const reactDrawer = document.getElementById('react-drawer');
+    const reactLogStream = document.getElementById('react-log-stream');
+    const reactSpinner = document.getElementById('react-spinner');
+    const responseContainer = document.getElementById('response-container');
+    const responseContent = document.getElementById('response-content');
+    const telemetryGauges = document.getElementById('telemetry-gauges');
+
+    let isFirstLog = true;
+
+    // Call exposed Python API safely
+    function apiCall(methodName, ...args) {
+      if (window.pywebview && window.pywebview.api && typeof window.pywebview.api[methodName] === 'function') {
+        window.pywebview.api[methodName](...args);
+      } else {
+        console.warn(`[WebHUD] API '${methodName}' not available yet.`);
+      }
+    }
+
+    // Submit user input to Python backend
+    function submitInputQuery() {
+      const text = queryInput.value.trim();
+      if (!text) return;
+      queryInput.value = '';
+      
+      // Auto open ReAct drawer and clear prior output
+      clearOutputViews();
+      appendLogEntry('info', `User Prompt: "${text}"`);
+      reactDrawer.open = true;
+
+      apiCall('submit_query', text);
+    }
+
+    // Keyboard hooks (Enter to submit, Escape to hide)
+    queryInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        submitInputQuery();
+      }
+    });
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        apiCall('hide_window');
+      }
+    });
+
+    // Clean markdown formatter
+    function renderMarkdown(text) {
+      if (!text) return '';
+      let html = text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+
+      // Code blocks
+      html = html.replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
+      // Inline code
+      html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+      // Bold
+      html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+      // Italic
+      html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+      // Bullet items
+      html = html.replace(/^\s*[-*]\s+(.*)$/gm, '<li>$1</li>');
+      // Wrap consecutive <li> in <ul>
+      html = html.replace(/(<li>.*<\/li>)/gs, '<ul>$1</ul>');
+      // Paragraph breaks
+      html = html.replace(/\n\n+/g, '<br/><br/>');
+      return html;
+    }
+
+    // Parse telemetry data from response to update gauges
+    function checkAndRenderTelemetryGauges(text) {
+      if (!text) return;
+      const lower = text.toLowerCase();
+      
+      const cpuMatch = text.match(/cpu(?:[\s\w]*?):\s*([0-9.]+)\s*%/i);
+      const ramMatch = text.match(/ram(?:[\s\w]*?):\s*([0-9.]+)\s*%/i) || text.match(/memory(?:[\s\w]*?):\s*([0-9.]+)\s*%/i);
+      const diskMatch = text.match(/disk(?:[\s\w]*?):\s*([0-9.]+)\s*%/i);
+
+      if (cpuMatch || ramMatch || diskMatch) {
+        telemetryGauges.classList.remove('hidden');
+        telemetryGauges.classList.add('grid');
+
+        if (cpuMatch) {
+          const val = Math.min(100, Math.max(0, parseFloat(cpuMatch[1])));
+          document.getElementById('gauge-cpu-val').innerText = `${val}%`;
+          document.getElementById('gauge-cpu-bar').style.width = `${val}%`;
+        }
+        if (ramMatch) {
+          const val = Math.min(100, Math.max(0, parseFloat(ramMatch[1])));
+          document.getElementById('gauge-ram-val').innerText = `${val}%`;
+          document.getElementById('gauge-ram-bar').style.width = `${val}%`;
+        }
+        if (diskMatch) {
+          const val = Math.min(100, Math.max(0, parseFloat(diskMatch[1])));
+          document.getElementById('gauge-disk-val').innerText = `${val}%`;
+          document.getElementById('gauge-disk-bar').style.width = `${val}%`;
+        }
+      }
+    }
+
+    function clearOutputViews() {
+      responseContainer.classList.add('hidden');
+      responseContainer.classList.remove('flex');
+      responseContent.innerHTML = '';
+      telemetryGauges.classList.add('hidden');
+      telemetryGauges.classList.remove('grid');
+    }
+
+    function appendLogEntry(channel, message) {
+      if (isFirstLog) {
+        reactLogStream.innerHTML = '';
+        isFirstLog = false;
+      }
+
+      const entry = document.createElement('div');
+      entry.className = 'py-0.5 leading-relaxed break-words';
+
+      let channelBadge = '';
+      let textColor = 'text-slate-300';
+
+      switch (channel.toLowerCase()) {
+        case 'thought':
+          channelBadge = '<span class="text-amber-400 font-bold">⚡ [Thought]</span>';
+          textColor = 'text-amber-100/90';
+          break;
+        case 'plan':
+          channelBadge = '<span class="text-sky-400 font-bold">📋 [Plan]</span>';
+          textColor = 'text-sky-100/90';
+          break;
+        case 'critique':
+          channelBadge = '<span class="text-orange-400 font-bold">🔍 [Critique]</span>';
+          textColor = 'text-orange-100/90';
+          break;
+        case 'action':
+          channelBadge = '<span class="text-purple-400 font-bold">⚙ [Action]</span>';
+          textColor = 'text-purple-100/90 font-semibold';
+          break;
+        case 'action_input':
+          channelBadge = '<span class="text-purple-300">  ↳ Input:</span>';
+          textColor = 'text-purple-200/80';
+          break;
+        case 'observation':
+          channelBadge = '<span class="text-emerald-400 font-bold">👁 [Observation]</span>';
+          textColor = 'text-emerald-200/90';
+          break;
+        case 'error':
+          channelBadge = '<span class="text-rose-400 font-bold">❌ [Error]</span>';
+          textColor = 'text-rose-200';
+          break;
+        default:
+          channelBadge = `<span class="text-cyan-400 font-bold">💡 [${channel.toUpperCase()}]</span>`;
+      }
+
+      entry.innerHTML = `${channelBadge} <span class="${textColor}">${escapeHtml(message)}</span>`;
+      reactLogStream.appendChild(entry);
+      reactLogStream.scrollTop = reactLogStream.scrollHeight;
+    }
+
+    function escapeHtml(text) {
+      return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    }
+
+    // === Python evaluate_js Callbacks ===
+
+    window.onAgentLog = function(channel, message) {
+      reactDrawer.open = true;
+      appendLogEntry(channel, message);
+    };
+
+    window.onAgentResponse = function(response) {
+      responseContainer.classList.remove('hidden');
+      responseContainer.classList.add('flex');
+      responseContent.innerHTML = renderMarkdown(response);
+      checkAndRenderTelemetryGauges(response);
+    };
+
+    window.onStatusChange = function(status, customText) {
+      const state = (status || 'IDLE').toUpperCase();
+      statusText.innerText = customText || state;
+
+      // Status pill themes
+      statusPill.className = "flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border";
+      statusDot.className = "w-2 h-2 rounded-full";
+
+      if (state === 'LISTENING') {
+        statusPill.classList.add('bg-emerald-950/80', 'text-emerald-300', 'border-emerald-600/50');
+        statusDot.classList.add('bg-emerald-400', 'animate-ping');
+      } else if (state === 'THINKING') {
+        statusPill.classList.add('bg-amber-950/80', 'text-amber-300', 'border-amber-600/50');
+        statusDot.classList.add('bg-amber-400', 'animate-pulse');
+      } else if (state === 'EXECUTING TOOL') {
+        statusPill.classList.add('bg-purple-950/80', 'text-purple-300', 'border-purple-600/50');
+        statusDot.classList.add('bg-purple-400');
+      } else if (state === 'SPEAKING') {
+        statusPill.classList.add('bg-cyan-950/80', 'text-cyan-300', 'border-cyan-600/50');
+        statusDot.classList.add('bg-cyan-400', 'animate-pulse');
+      } else if (state === 'ERROR') {
+        statusPill.classList.add('bg-rose-950/80', 'text-rose-300', 'border-rose-600/50');
+        statusDot.classList.add('bg-rose-400');
+      } else {
+        // IDLE
+        statusPill.classList.add('bg-slate-800', 'text-slate-400', 'border-slate-700');
+        statusDot.classList.add('bg-slate-500');
+      }
+    };
+
+    window.onVoiceTranscript = function(transcript) {
+      queryInput.value = transcript;
+    };
+
+    window.clearFeed = function() {
+      reactLogStream.innerHTML = '<div class="text-slate-500 italic">No actions executed yet.</div>';
+      isFirstLog = true;
+      reactDrawer.open = false;
+      clearOutputViews();
+    };
+
+    window.focusInput = function() {
+      queryInput.focus();
+    };
+
+    // Auto-focus on load
+    window.addEventListener('DOMContentLoaded', () => {
+      queryInput.focus();
+    });
+  </script>
+</body>
+</html>
