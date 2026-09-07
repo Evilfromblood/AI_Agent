@@ -207,17 +207,18 @@ def run_ambient_voice_mode(agent: JarvisAgent, vm: VoiceManager) -> None:
 
 
 def run_hud_mode(agent: JarvisAgent, vm: VoiceManager) -> None:
-    """Launch the modern PyWebView floating HUD and system tray daemon."""
-    from ui.web_hud import run_web_hud
+    """Launch the native PySide6 translucent floating HUD and system tray daemon."""
+    from ui.qt_hud import run_qt_hud
 
     print(BANNER)
     print_status(agent.llm, agent.mode)
-    print(f"{Fore.GREEN}[PyWebView HUD Active] Press Alt+Space to toggle HUD, Esc to hide.{Style.RESET_ALL}\n")
+    print(f"{Fore.GREEN}[PySide6 Floating HUD Active] Press Alt+Space to toggle HUD, Esc to hide.{Style.RESET_ALL}\n")
 
     try:
-        run_web_hud(agent=agent, vm=vm)
+        run_qt_hud(agent=agent, vm=vm)
     except KeyboardInterrupt:
         pass
+
 
 
 
