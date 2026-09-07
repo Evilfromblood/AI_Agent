@@ -502,6 +502,31 @@
       queryInput.focus();
     };
 
+    window.setHudVisible = function(visible) {
+      const container = document.getElementById('hud-container');
+      if (!container) return;
+      if (visible) {
+        container.style.display = 'flex';
+        requestAnimationFrame(() => {
+          container.style.opacity = '1';
+          container.style.pointerEvents = 'auto';
+          container.style.transform = 'translateY(0) scale(1)';
+        });
+        const input = document.getElementById('query-input');
+        if (input) setTimeout(() => input.focus(), 60);
+      } else {
+        container.style.opacity = '0';
+        container.style.pointerEvents = 'none';
+        container.style.transform = 'translateY(-8px) scale(0.98)';
+        setTimeout(() => {
+          if (container.style.opacity === '0') {
+            container.style.display = 'none';
+          }
+        }, 200);
+      }
+    };
+
+
     // Dynamically notify Python backend to resize the pywebview window to wrap the card snugly
     function notifyContentHeight() {
       const card = document.getElementById('hud-container');

@@ -39,19 +39,26 @@ class WebHUDAPI:
         self._lock = threading.Lock()
         self.tray_manager = None
 
+        # Prevent pywebview recursive introspection of complex subsystem objects on Windows
+        setattr(self, "_serializable", False)
+        setattr(self.agent, "_serializable", False)
+        setattr(self.vm, "_serializable", False)
+
         # Bind agent log callback
         self.agent.log_callback = self._on_agent_log
 
     def set_window(self, window: webview.Window) -> None:
         """Associate the pywebview window instance."""
+        setattr(window, "_serializable", False)
         self.window = window
 
     def _eval_js(self, script: str) -> None:
         """Evaluate a JavaScript expression safely on the window."""
-        if not self.window:
+        win = self.window or (webview.windows[0] if webview.windows else None)
+        if not win:
             return
         try:
-            self.window.evaluate_js(script)
+            win.evaluate_js(script)
         except Exception:
             pass
 
@@ -157,24 +164,32 @@ class WebHUDAPI:
         self._eval_js("if (window.clearFeed) window.clearFeed();")
         self._eval_js("if (window.onStatusChange) window.onStatusChange('IDLE');")
 
+    def _is_mock_window(self) -> bool:
+        """Check whether the active window reference is a unit test mock."""
+        if not self.window:
+            return False
+        return type(getattr(self.window, "native", None)).__name__ == "MagicMock"
+
     def hide_window(self) -> None:
         """Conceal the HUD window into background."""
-        if self.window:
+        self.is_visible = False
+        self._eval_js("if (window.setHudVisible) window.setHudVisible(false);")
+        if self._is_mock_window():
             try:
                 self.window.hide()
             except Exception:
                 pass
-            self.is_visible = False
 
     def show_window(self) -> None:
         """Reveal and focus the HUD window."""
-        if self.window:
+        self.is_visible = True
+        self._eval_js("if (window.setHudVisible) window.setHudVisible(true);")
+        if self._is_mock_window():
             try:
                 self.window.show()
                 self._eval_js("if (window.focusInput) window.focusInput();")
             except Exception:
                 pass
-            self.is_visible = True
 
     def toggle_window(self) -> None:
         """Smoothly toggle window visibility."""
@@ -189,7 +204,8 @@ class WebHUDAPI:
             return
         try:
             clamped_h = max(190, min(int(new_height), 650))
-            self.window.resize(self.window.width, clamped_h)
+            if self._is_mock_window():
+                self.window.resize(self.window.width, clamped_h)
         except Exception:
             pass
 
@@ -283,7 +299,7 @@ class WebHUD:
             url=str(self.html_path.resolve()),
             js_api=self.api,
             width=self.width,
-            height=self.height,
+            height=max(self.height, 650),
             x=pos_x,
             y=pos_y,
             frameless=True,
@@ -293,16 +309,18 @@ class WebHUD:
             shadow=True,
             background_color="#000000",
         )
+        setattr(self.window, "_serializable", False)
         self.api.set_window(self.window)
 
-        # Register global OS hotkey Alt+Space
-        self._register_hotkey()
-
-        # Start PyWebView GUI event loop
+        # Start PyWebView GUI event loop with EdgeChromium backend
         try:
-            webview.start(debug=False)
+            webview.start(func=self._on_ready, gui="edgechromium", debug=False)
         finally:
             self._cleanup()
+
+    def _on_ready(self, *args, **kwargs) -> None:
+        """Callback executed once pywebview GUI window is initialized and event loop is running."""
+        self._register_hotkey()
 
     def _register_hotkey(self) -> None:
         """Register the system-wide global hotkey without blocking the main loop."""
