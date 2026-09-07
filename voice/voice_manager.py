@@ -43,6 +43,15 @@ try:
 except ImportError:
     HAS_SR = False
 
+try:
+    import io
+    import sounddevice as sd
+    import numpy as np
+    import scipy.io.wavfile as wav
+    HAS_SOUNDDEVICE = True
+except ImportError:
+    HAS_SOUNDDEVICE = False
+
 
 class VoiceManager:
     """
@@ -75,9 +84,14 @@ class VoiceManager:
         if HAS_SR:
             try:
                 self._recognizer = sr.Recognizer()
+            except Exception:
+                self._recognizer = None
+
+            try:
                 self._microphone = sr.Microphone()
                 self._stt_available = True
             except Exception:
+                self._microphone = None
                 self._stt_available = False
 
         # Cache directory for synthesized audio
@@ -94,8 +108,11 @@ class VoiceManager:
 
     @property
     def is_stt_available(self) -> bool:
-        """Return True if microphone capture and speech recognition are available."""
-        return self._stt_available and self._recognizer is not None and self._microphone is not None
+        """Return True if speech recognition and an audio recording backend (Microphone or sounddevice) are available."""
+        if not HAS_SR:
+            return False
+        has_sr_mic = (self._stt_available and self._recognizer is not None and self._microphone is not None)
+        return has_sr_mic or HAS_SOUNDDEVICE
 
     @staticmethod
     def clean_text_for_speech(text: str) -> str:
@@ -313,36 +330,88 @@ class VoiceManager:
 
         if not self.is_stt_available:
             print(
-                f"{Fore.YELLOW}[Voice] Speech recognition hardware or PyAudio is unavailable on this system.\n"
+                f"{Fore.YELLOW}[Voice] Speech recognition hardware or audio capture libraries are unavailable.\n"
                 f"        Please enter commands directly via keyboard.{Style.RESET_ALL}"
             )
             return ""
 
+        # 1. First attempt: speech_recognition.Microphone if available
+        if self._microphone is not None and self._stt_available and self._recognizer is not None:
+            try:
+                print(f"\n{Fore.CYAN}[Listening...] Speak now.{Style.RESET_ALL}")
+                with self._microphone as source:
+                    self._recognizer.adjust_for_ambient_noise(source, duration=0.8)
+                    audio = self._recognizer.listen(
+                        source,
+                        timeout=timeout,
+                        phrase_time_limit=phrase_time_limit,
+                    )
+
+                print(f"{Fore.CYAN}[Transcribing voice...]{Style.RESET_ALL}")
+                transcription = self._recognizer.recognize_google(audio)
+                cleaned = transcription.strip() if transcription else ""
+                if cleaned:
+                    print(f"{Fore.GREEN}[Voice Transcribed]: \"{cleaned}\"{Style.RESET_ALL}")
+                return cleaned
+
+            except sr.WaitTimeoutError:
+                print(f"{Fore.LIGHTBLACK_EX}[Voice: Listening timed out (no speech detected)]{Style.RESET_ALL}")
+                return ""
+            except sr.UnknownValueError:
+                print(f"{Fore.LIGHTBLACK_EX}[Voice: Speech could not be understood]{Style.RESET_ALL}")
+                return ""
+            except Exception as e:
+                # If microphone failed (PyAudio or device failure), fall back to sounddevice if available
+                if not HAS_SOUNDDEVICE:
+                    print(f"{Fore.RED}[Voice Error: {e}]{Style.RESET_ALL}")
+                    return ""
+
+        # 2. Fallback: recording directly with sounddevice & numpy
+        if HAS_SOUNDDEVICE:
+            return self._listen_with_sounddevice(duration=phrase_time_limit or 5)
+
+        return ""
+
+    def _listen_with_sounddevice(self, duration: int = 5, fs: int = 16000) -> str:
+        """
+        Record audio directly using sounddevice and transcribe using Recognizer and AudioFile.
+        """
         try:
-            print(f"\n{Fore.CYAN}[Listening...] Speak now.{Style.RESET_ALL}")
-            with self._microphone as source:
-                self._recognizer.adjust_for_ambient_noise(source, duration=0.8)
-                audio = self._recognizer.listen(
-                    source,
-                    timeout=timeout,
-                    phrase_time_limit=phrase_time_limit,
-                )
+            import io
+            import numpy as np
+            import scipy.io.wavfile as wav
+            import sounddevice as sd
+            import speech_recognition as sr
+
+            print(f"\n{Fore.CYAN}[Listening... speak now]{Style.RESET_ALL}")
+            audio_data = sd.rec(int(duration * fs), samplerate=fs, channels=1, dtype="int16")
+            sd.wait()
+
+            byte_io = io.BytesIO()
+            wav.write(byte_io, fs, audio_data)
+            byte_io.seek(0)
+
+            r = self._recognizer or sr.Recognizer()
+            with sr.AudioFile(byte_io) as source:
+                audio = r.record(source)
 
             print(f"{Fore.CYAN}[Transcribing voice...]{Style.RESET_ALL}")
-            transcription = self._recognizer.recognize_google(audio)
-            cleaned = transcription.strip() if transcription else ""
+            text = r.recognize_google(audio)
+            cleaned = text.strip() if text else ""
             if cleaned:
                 print(f"{Fore.GREEN}[Voice Transcribed]: \"{cleaned}\"{Style.RESET_ALL}")
             return cleaned
 
-        except sr.WaitTimeoutError:
-            print(f"{Fore.LIGHTBLACK_EX}[Voice: Listening timed out (no speech detected)]{Style.RESET_ALL}")
-            return ""
-        except sr.UnknownValueError:
-            print(f"{Fore.LIGHTBLACK_EX}[Voice: Speech could not be understood]{Style.RESET_ALL}")
-            return ""
         except Exception as e:
-            print(f"{Fore.RED}[Voice Error: {e}]{Style.RESET_ALL}")
+            err_name = type(e).__name__
+            if "UnknownValueError" in err_name:
+                print(f"{Fore.LIGHTBLACK_EX}[Voice: Speech could not be understood (silence or low volume)]{Style.RESET_ALL}")
+            elif "RequestError" in err_name:
+                print(f"{Fore.RED}[Voice Error: Google Speech Recognition connection issue: {e}]{Style.RESET_ALL}")
+            elif "WaitTimeoutError" in err_name:
+                print(f"{Fore.LIGHTBLACK_EX}[Voice: Listening timed out]{Style.RESET_ALL}")
+            else:
+                print(f"{Fore.LIGHTBLACK_EX}[Voice: {err_name} - {e}]{Style.RESET_ALL}")
             return ""
 
     def listen_continuous(

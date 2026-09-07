@@ -16,3 +16,6 @@ pygame-ce>=2.5.0; python_version >= "3.13"
 pygame>=2.5.0; python_version < "3.13"
 SpeechRecognition>=3.10.0
 pyttsx3>=2.90
+sounddevice>=0.4.6
+numpy>=1.26.0
+scipy>=1.11.0

@@ -187,3 +187,95 @@ def test_voice_input_handler_backward_compatibility():
     res = handler.listen_and_transcribe(timeout=4, phrase_time_limit=8)
     assert res == "hello jarvis"
     mock_vm.listen_once.assert_called_once_with(timeout=4, phrase_time_limit=8)
+
+
+def test_voice_manager_is_stt_available_sounddevice():
+    vm = VoiceManager()
+    vm._stt_available = False
+    vm._microphone = None
+
+    with patch("voice.voice_manager.HAS_SR", True), \
+         patch("voice.voice_manager.HAS_SOUNDDEVICE", True):
+        assert vm.is_stt_available is True
+
+    with patch("voice.voice_manager.HAS_SR", True), \
+         patch("voice.voice_manager.HAS_SOUNDDEVICE", False):
+        assert vm.is_stt_available is False
+
+
+def test_voice_manager_listen_once_sounddevice_fallback_when_mic_none():
+    vm = VoiceManager()
+    vm._microphone = None
+    vm._stt_available = False
+
+    with patch("voice.voice_manager.HAS_SR", True), \
+         patch("voice.voice_manager.HAS_SOUNDDEVICE", True), \
+         patch.object(vm, "_listen_with_sounddevice", return_value="activate stealth mode") as mock_sd:
+
+        result = vm.listen_once(phrase_time_limit=6)
+        assert result == "activate stealth mode"
+        mock_sd.assert_called_once_with(duration=6)
+
+
+def test_voice_manager_listen_once_sounddevice_fallback_on_mic_error():
+    vm = VoiceManager()
+    vm._stt_available = True
+    mock_mic = MagicMock()
+    mock_mic.__enter__.side_effect = OSError("Microphone device disconnected")
+    vm._microphone = mock_mic
+    vm._recognizer = MagicMock()
+
+    with patch("voice.voice_manager.HAS_SR", True), \
+         patch("voice.voice_manager.HAS_SOUNDDEVICE", True), \
+         patch.object(vm, "_listen_with_sounddevice", return_value="turn on lights") as mock_sd:
+
+        result = vm.listen_once(phrase_time_limit=4)
+        assert result == "turn on lights"
+        mock_sd.assert_called_once_with(duration=4)
+
+
+def test_voice_manager_listen_with_sounddevice_success():
+    import numpy as np
+    vm = VoiceManager()
+    dummy_audio = np.zeros((16000 * 2,), dtype=np.int16)
+    mock_recognizer = MagicMock()
+    mock_recognizer.recognize_google.return_value = "system diagnostic report"
+    vm._recognizer = mock_recognizer
+
+    with patch("sounddevice.rec", return_value=dummy_audio) as mock_rec, \
+         patch("sounddevice.wait"), \
+         patch("scipy.io.wavfile.write"), \
+         patch("speech_recognition.AudioFile") as mock_af:
+
+        result = vm._listen_with_sounddevice(duration=2, fs=16000)
+        assert result == "system diagnostic report"
+        mock_rec.assert_called_once()
+        mock_recognizer.record.assert_called_once()
+        mock_recognizer.recognize_google.assert_called_once()
+
+
+def test_voice_manager_listen_with_sounddevice_exceptions():
+    import speech_recognition as sr
+    vm = VoiceManager()
+    mock_recognizer = MagicMock()
+    vm._recognizer = mock_recognizer
+
+    # 1. UnknownValueError (silence/unintelligible)
+    with patch("sounddevice.rec"), \
+         patch("sounddevice.wait"), \
+         patch("scipy.io.wavfile.write"), \
+         patch("speech_recognition.AudioFile"):
+
+        mock_recognizer.recognize_google.side_effect = sr.UnknownValueError()
+        assert vm._listen_with_sounddevice(duration=1) == ""
+
+    # 2. RequestError (network error)
+    with patch("sounddevice.rec"), \
+         patch("sounddevice.wait"), \
+         patch("scipy.io.wavfile.write"), \
+         patch("speech_recognition.AudioFile"):
+
+        mock_recognizer.recognize_google.side_effect = sr.RequestError("API unavailable")
+        assert vm._listen_with_sounddevice(duration=1) == ""
+
+
