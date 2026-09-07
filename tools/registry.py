@@ -16,11 +16,29 @@ class ToolRegistry:
         self._tools: Dict[str, Callable] = {}
         self._metadata: Dict[str, Dict[str, Any]] = {}
 
-    def register(self, func: Optional[Callable] = None, *, name: Optional[str] = None, description: Optional[str] = None):
+    def register(
+        self,
+        func: Optional[Any] = None,
+        *,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+    ):
         """
         Decorator to register a tool function.
-        Can be used as @registry.register or @registry.register(name="custom_name")
+        Can be used as:
+        - @registry.register
+        - @registry.register()
+        - @registry.register("tool_name")
+        - @registry.register(name="tool_name")
         """
+        if isinstance(func, str):
+            custom_name = func
+
+            def decorator_from_str(fn: Callable) -> Callable:
+                return self.register(fn, name=custom_name, description=description)
+
+            return decorator_from_str
+
         def decorator(fn: Callable) -> Callable:
             tool_name = name or fn.__name__
             tool_doc = description or (inspect.getdoc(fn) or "No description provided.")
@@ -135,3 +153,5 @@ class ToolRegistry:
 
 # Global registry singleton
 registry = ToolRegistry()
+register_tool = registry.register
+

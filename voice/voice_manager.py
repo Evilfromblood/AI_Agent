@@ -74,7 +74,10 @@ class VoiceManager:
 
         self._speech_lock = threading.Lock()
         self._stop_requested = False
+        self._stop_event = threading.Event()
+        self._is_speaking = False
         self._is_continuous_listening = False
+
 
         # STT Initialization
         self._recognizer: Optional[sr.Recognizer] = None
@@ -233,25 +236,42 @@ class VoiceManager:
         else:
             self._speak_sync(clean_text)
 
+    def is_speaking(self) -> bool:
+        """Return True if speech synthesis or audio playback is actively playing."""
+        if HAS_PYGAME and pygame.mixer.get_init():
+            try:
+                if pygame.mixer.music.get_busy():
+                    return True
+            except Exception:
+                pass
+        return self._is_speaking
+
     def _speak_sync(self, clean_text: str) -> None:
         """Internal synchronous speech execution protected by speech lock."""
         with self._speech_lock:
             self._stop_requested = False
+            self._stop_event.clear()
+            self._is_speaking = True
+            try:
+                # Primary attempt: edge-tts + pygame
+                if HAS_EDGE_TTS and HAS_PYGAME and not self._stop_event.is_set():
+                    success = self._speak_edge_tts(clean_text)
+                    if success:
+                        return
 
-            # Primary attempt: edge-tts + pygame
-            if HAS_EDGE_TTS and HAS_PYGAME:
-                success = self._speak_edge_tts(clean_text)
-                if success:
-                    return
-
-            # Offline fallback: pyttsx3
-            if HAS_PYTTSX3:
-                self._speak_pyttsx3(clean_text)
+                # Offline fallback: pyttsx3
+                if HAS_PYTTSX3 and not self._stop_event.is_set():
+                    self._speak_pyttsx3(clean_text)
+            finally:
+                self._is_speaking = False
 
     def _speak_edge_tts(self, text: str) -> bool:
         """Synthesize via edge-tts and stream through pygame.mixer."""
         temp_audio: Optional[Path] = None
         try:
+            if self._stop_event.is_set():
+                return False
+
             # Ensure pygame mixer is initialized
             if not pygame.mixer.get_init():
                 pygame.mixer.init()
@@ -265,6 +285,9 @@ class VoiceManager:
             # Run asynchronous edge-tts synthesis
             asyncio.run(_synthesize())
 
+            if self._stop_event.is_set():
+                return False
+
             if not temp_audio.exists() or temp_audio.stat().st_size == 0:
                 return False
 
@@ -275,19 +298,23 @@ class VoiceManager:
             pygame.mixer.music.load(str(temp_audio))
             pygame.mixer.music.play()
 
-            # Wait for playback completion while monitoring stop request
-            while pygame.mixer.music.get_busy() and not self._stop_requested:
+            # Wait for playback completion while monitoring stop request or event
+            while pygame.mixer.music.get_busy() and not self._stop_requested and not self._stop_event.is_set():
                 time.sleep(0.05)
 
-            if self._stop_requested:
+            if self._stop_requested or self._stop_event.is_set():
                 pygame.mixer.music.stop()
 
-            pygame.mixer.music.unload()
             return True
 
         except Exception:
             return False
         finally:
+            try:
+                if HAS_PYGAME and pygame.mixer.get_init():
+                    pygame.mixer.music.unload()
+            except Exception:
+                pass
             if temp_audio and temp_audio.exists():
                 try:
                     temp_audio.unlink(missing_ok=True)
@@ -297,6 +324,8 @@ class VoiceManager:
     def _speak_pyttsx3(self, text: str) -> bool:
         """Offline fallback speech using pyttsx3 SAPI5/local TTS engine."""
         try:
+            if self._stop_event.is_set():
+                return False
             engine = pyttsx3.init()
             engine.setProperty("rate", 175)
             engine.say(text)
@@ -305,14 +334,28 @@ class VoiceManager:
         except Exception:
             return False
 
-    def stop_speech(self) -> None:
-        """Immediately interrupt any ongoing audio playback."""
+    def stop_speaking(self) -> None:
+        """
+        Immediately interrupt active audio playback, signal stop event,
+        and release file handles.
+        """
         self._stop_requested = True
+        self._stop_event.set()
         try:
-            if HAS_PYGAME and pygame.mixer.get_init() and pygame.mixer.music.get_busy():
+            if HAS_PYGAME and pygame.mixer.get_init():
                 pygame.mixer.music.stop()
+                try:
+                    pygame.mixer.music.unload()
+                except Exception:
+                    pass
         except Exception:
             pass
+        self._is_speaking = False
+
+    def stop_speech(self) -> None:
+        """Alias for stop_speaking."""
+        self.stop_speaking()
+
 
     def listen_once(
         self,

@@ -279,3 +279,35 @@ def test_voice_manager_listen_with_sounddevice_exceptions():
         assert vm._listen_with_sounddevice(duration=1) == ""
 
 
+def test_voice_manager_stop_speaking():
+    """Verify stop_speaking sets stop event, halts pygame mixer, and unloads music."""
+    vm = VoiceManager()
+    vm._is_speaking = True
+
+    with patch("voice.voice_manager.HAS_PYGAME", True), \
+         patch("pygame.mixer.get_init", return_value=True), \
+         patch("pygame.mixer.music") as mock_music:
+        mock_music.get_busy.return_value = False
+        vm.stop_speaking()
+        assert vm._stop_event.is_set()
+        assert vm.is_speaking() is False
+        mock_music.stop.assert_called_once()
+        mock_music.unload.assert_called_once()
+
+
+def test_voice_manager_is_speaking_states():
+    """Verify is_speaking reflects playback state and pygame mixer state."""
+    vm = VoiceManager()
+    assert vm.is_speaking() is False
+
+    vm._is_speaking = True
+    assert vm.is_speaking() is True
+
+    vm._is_speaking = False
+    with patch("voice.voice_manager.HAS_PYGAME", True), \
+         patch("pygame.mixer.get_init", return_value=True), \
+         patch("pygame.mixer.music.get_busy", return_value=True):
+        assert vm.is_speaking() is True
+
+
+

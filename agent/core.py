@@ -10,6 +10,7 @@ from agent.llm_client import LLMClient
 from agent.prompts import build_system_prompt
 from agent.react_parser import ReActParser, ReActStep
 from config import config
+from memory.memory_store import memory_store
 from tools.registry import registry
 
 init(autoreset=True)
@@ -103,7 +104,14 @@ class JarvisAgent:
         """
         tool_descriptions = registry.get_react_descriptions()
         tool_names = registry.list_tool_names()
-        system_prompt = build_system_prompt(tool_descriptions, tool_names)
+        memory_context = ""
+        try:
+            memory_context = memory_store.get_relevant_context(user_prompt)
+        except Exception:
+            pass
+        system_prompt = build_system_prompt(
+            tool_descriptions, tool_names, memory_context=memory_context
+        )
 
         # Build trajectory for this run
         messages = [
@@ -245,8 +253,15 @@ class JarvisAgent:
         Execute using Ollama's native tool-calling function signatures.
         """
         tools = registry.get_ollama_tools()
+        system_content = "You are JARVIS, a helpful, precise desktop AI assistant."
+        try:
+            memory_context = memory_store.get_relevant_context(user_prompt)
+            if memory_context:
+                system_content += f"\n\n[Remembered Context]\n{memory_context}"
+        except Exception:
+            pass
         messages = [
-            {"role": "system", "content": "You are JARVIS, a helpful, precise desktop AI assistant."},
+            {"role": "system", "content": system_content},
         ]
         for turn in self.conversation_history:
             messages.append(turn)

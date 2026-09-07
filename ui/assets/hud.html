@@ -27,10 +27,11 @@
   <style>
     /* Desktop transparency base */
     html, body {
-      background: transparent !important;
+      background-color: transparent !important;
       margin: 0;
-      padding: 12px;
+      padding: 8px;
       overflow: hidden;
+      height: fit-content;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
       user-select: none;
       box-sizing: border-box;
@@ -44,6 +45,7 @@
       border: 1px solid rgba(6, 182, 212, 0.3);
       box-shadow: 0 0 35px rgba(6, 182, 212, 0.18), 0 25px 50px -12px rgba(0, 0, 0, 0.7);
     }
+
 
 
     /* Subtle ambient pulsing cyan glow */
@@ -112,10 +114,10 @@
     }
   </style>
 </head>
-<body class="m-0 p-3 overflow-hidden bg-transparent">
+<body class="m-0 p-2 overflow-hidden bg-transparent">
 
   <!-- Main Floating HUD Card -->
-  <div id="hud-container" class="glass-card w-full rounded-2xl p-4 flex flex-col gap-3 text-slate-200 transition-all duration-300">
+  <div id="hud-container" class="glass-card w-full max-w-2xl mx-auto rounded-2xl p-4 flex flex-col gap-3 text-slate-200 transition-all duration-300">
 
     
     <!-- Header / Drag Bar -->
@@ -180,6 +182,12 @@
       <button onclick="apiCall('clear_history')" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800/70 hover:bg-slate-700 text-slate-400 border border-slate-700/50 hover:text-slate-200 transition">
         <span>🗑️</span>
         <span>Clear</span>
+      </button>
+
+      <!-- Dynamic Voice Stop Control -->
+      <button id="btn-stop" onclick="apiCall('stop_speech')" class="hidden flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/40 text-rose-300 border border-rose-500/40 transition-all">
+        <span>🛑</span>
+        <span>Stop</span>
       </button>
 
       <div class="ml-auto text-[11px] text-slate-500 hidden sm:block">
@@ -296,9 +304,10 @@
 
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
-        apiCall('hide_window');
+        apiCall('handle_escape');
       }
     });
+
 
     // Clean markdown formatter
     function renderMarkdown(text) {
@@ -439,6 +448,18 @@
       const state = (status || 'IDLE').toUpperCase();
       statusText.innerText = customText || state;
 
+      // Dynamically toggle stop button when speaking
+      const btnStop = document.getElementById('btn-stop');
+      if (btnStop) {
+        if (state === 'SPEAKING') {
+          btnStop.classList.remove('hidden');
+          btnStop.classList.add('animate-pulse', 'ring-1', 'ring-rose-400');
+        } else {
+          btnStop.classList.add('hidden');
+          btnStop.classList.remove('animate-pulse', 'ring-1', 'ring-rose-400');
+        }
+      }
+
       // Status pill themes
       statusPill.className = "flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border";
       statusDot.className = "w-2 h-2 rounded-full";
@@ -485,10 +506,11 @@
     function notifyContentHeight() {
       const card = document.getElementById('hud-container');
       if (!card) return;
-      // card height + 24px body padding (12px top + 12px bottom) + 4px allowance
-      const targetHeight = Math.ceil(card.offsetHeight + 28);
+      // card height + 16px body padding (8px top + 8px bottom) + 4px allowance
+      const targetHeight = Math.ceil(card.offsetHeight + 20);
       apiCall('resize_window', targetHeight);
     }
+
 
     if (window.ResizeObserver) {
       const observer = new ResizeObserver(() => {

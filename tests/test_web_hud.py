@@ -214,10 +214,50 @@ def test_web_hud_api_resize_window():
 
     # Test lower bound clamp
     api.resize_window(100)
-    mock_window.resize.assert_called_with(760, 200)
+    mock_window.resize.assert_called_with(760, 190)
 
     # Test upper bound clamp
     api.resize_window(900)
-    mock_window.resize.assert_called_with(760, 680)
+    mock_window.resize.assert_called_with(760, 650)
+
+
+def test_web_hud_api_stop_speech():
+    """Verify stop_speech halts speech synthesis and resets status to IDLE."""
+    mock_agent = MagicMock(spec=JarvisAgent)
+    mock_vm = MagicMock(spec=VoiceManager)
+    api = WebHUDAPI(agent=mock_agent, vm=mock_vm)
+    mock_window = MagicMock()
+    api.set_window(mock_window)
+
+    api.stop_speech()
+    mock_vm.stop_speaking.assert_called_once()
+    calls = [call[0][0] for call in mock_window.evaluate_js.call_args_list]
+    assert any("window.onStatusChange('IDLE')" in c for c in calls)
+
+
+def test_web_hud_api_handle_escape():
+    """Verify handle_escape stops speech if speaking, or hides window otherwise."""
+    mock_agent = MagicMock(spec=JarvisAgent)
+    mock_vm = MagicMock(spec=VoiceManager)
+    api = WebHUDAPI(agent=mock_agent, vm=mock_vm)
+    mock_window = MagicMock()
+    api.set_window(mock_window)
+
+    # 1. Speaking -> stop speech, do not hide
+    mock_vm.is_speaking.return_value = True
+    with patch.object(api, "stop_speech") as mock_stop_speech, \
+         patch.object(api, "hide_window") as mock_hide_window:
+        api.handle_escape()
+        mock_stop_speech.assert_called_once()
+        mock_hide_window.assert_not_called()
+
+    # 2. Not speaking -> hide window
+    mock_vm.is_speaking.return_value = False
+    with patch.object(api, "stop_speech") as mock_stop_speech, \
+         patch.object(api, "hide_window") as mock_hide_window:
+        api.handle_escape()
+        mock_stop_speech.assert_not_called()
+        mock_hide_window.assert_called_once()
+
 
 

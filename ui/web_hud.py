@@ -188,10 +188,22 @@ class WebHUDAPI:
         if not self.window:
             return
         try:
-            clamped_h = max(200, min(int(new_height), 680))
+            clamped_h = max(190, min(int(new_height), 650))
             self.window.resize(self.window.width, clamped_h)
         except Exception:
             pass
+
+    def stop_speech(self) -> None:
+        """Interrupt active speech synthesis immediately and reset status."""
+        self.vm.stop_speaking()
+        self._eval_js("if (window.onStatusChange) window.onStatusChange('IDLE');")
+
+    def handle_escape(self) -> None:
+        """Handle Esc key: stop audio on first press if speaking; hide HUD on second press."""
+        if self.vm.is_speaking():
+            self.stop_speech()
+        else:
+            self.hide_window()
 
     def exit_app(self) -> None:
         """Shutdown helper for tray and window."""
@@ -226,8 +238,8 @@ class WebHUD:
         self,
         agent: JarvisAgent,
         vm: Optional[VoiceManager] = None,
-        width: int = 760,
-        height: int = 220,
+        width: int = 740,
+        height: int = 190,
         hotkey: str = "alt+space",
     ):
         self.agent = agent
@@ -235,6 +247,7 @@ class WebHUD:
         self.width = width
         self.height = height
         self.hotkey = hotkey
+
 
 
         self.api = WebHUDAPI(agent=self.agent, vm=self.vm)

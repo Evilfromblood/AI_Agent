@@ -138,6 +138,23 @@ class AssistantConfig(BaseModel):
         description="Maximum continuous duration in seconds for spoken phrases",
     )
 
+    # Long-Term Semantic Memory Settings (Phase 5)
+    memory_db_path: str = Field(
+        default="jarvis_memory.db",
+        description="Path to persistent SQLite memory database",
+    )
+    embedding_model: str = Field(
+        default="nomic-embed-text",
+        description="Ollama embedding model name",
+    )
+    memory_similarity_threshold: float = Field(
+        default=0.35,
+        description="Minimum cosine similarity threshold for semantic memory recall",
+    )
+    memory_top_k: int = Field(
+        default=3,
+        description="Maximum relevant memory chunks to inject into agent context",
+    )
 
 
 # Singleton default configuration

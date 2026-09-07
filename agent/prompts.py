@@ -42,11 +42,21 @@ RULES:
 """
 
 
-def build_system_prompt(tool_descriptions: str, tool_names: list[str]) -> str:
-    """Compose full system prompt including JARVIS persona and tool definitions."""
+from typing import List, Optional
+
+def build_system_prompt(
+    tool_descriptions: str,
+    tool_names: List[str],
+    memory_context: Optional[str] = None,
+) -> str:
+    """Compose full system prompt including JARVIS persona, tool definitions, and optional memory context."""
     names_str = ", ".join(tool_names)
     react_part = REACT_INSTRUCTIONS.format(
         tool_descriptions=tool_descriptions,
         tool_names=names_str,
     )
-    return f"{JARVIS_SYSTEM_PROMPT}\n{react_part}"
+    prompt = f"{JARVIS_SYSTEM_PROMPT}\n{react_part}"
+    if memory_context and memory_context.strip():
+        prompt += f"\n\n[Remembered Context]\n{memory_context.strip()}"
+    return prompt
+
