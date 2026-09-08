@@ -10,6 +10,7 @@ import tools.scraper_tools
 import tools.browser_tools
 import tools.system_tools
 import tools.gui_tools
+import tools.reminder_tools
 import memory.memory_store
 
 __all__ = [

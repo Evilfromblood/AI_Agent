@@ -144,9 +144,25 @@ class MemoryStore:
                 """
             )
             cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS scheduled_reminders (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    reminder_text TEXT NOT NULL,
+                    due_timestamp REAL NOT NULL,
+                    recurrence TEXT DEFAULT 'none',
+                    status TEXT DEFAULT 'pending',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+                """
+            )
+            cursor.execute(
                 "CREATE INDEX IF NOT EXISTS idx_key_values_cat ON key_values (category);"
             )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_reminders_status_due ON scheduled_reminders (status, due_timestamp);"
+            )
             conn.commit()
+
 
     def get_embedding(self, text: str) -> List[float]:
         """
@@ -403,13 +419,77 @@ class MemoryStore:
 
         return "\n".join(context_lines[:lim])
 
+    def add_reminder(
+        self,
+        reminder_text: str,
+        due_timestamp: float,
+        recurrence: str = "none",
+    ) -> int:
+        """Persist a scheduled reminder task into SQLite."""
+        with self._lock, self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO scheduled_reminders (reminder_text, due_timestamp, recurrence, status)
+                VALUES (?, ?, ?, 'pending');
+                """,
+                (reminder_text.strip(), float(due_timestamp), recurrence),
+            )
+            conn.commit()
+            return cursor.lastrowid
+
+    def get_due_reminders(self, current_time: Optional[float] = None) -> List[Dict[str, Any]]:
+        """Retrieve pending reminders whose due timestamp is <= current_time."""
+        now = time.time() if current_time is None else float(current_time)
+        with self._lock, self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT id, reminder_text, due_timestamp, recurrence, status, created_at
+                FROM scheduled_reminders
+                WHERE status = 'pending' AND due_timestamp <= ?
+                ORDER BY due_timestamp ASC;
+                """,
+                (now,),
+            )
+            rows = cursor.fetchall()
+            return [dict(row) for row in rows]
+
+    def mark_reminder_completed(self, reminder_id: int) -> bool:
+        """Mark a scheduled reminder as completed."""
+        with self._lock, self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE scheduled_reminders SET status = 'completed' WHERE id = ?;",
+                (reminder_id,),
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def list_active_reminders(self) -> List[Dict[str, Any]]:
+        """Return all pending reminders ordered by due timestamp."""
+        with self._lock, self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT id, reminder_text, due_timestamp, recurrence, status, created_at
+                FROM scheduled_reminders
+                WHERE status = 'pending'
+                ORDER BY due_timestamp ASC;
+                """
+            )
+            rows = cursor.fetchall()
+            return [dict(row) for row in rows]
+
     def clear(self) -> None:
-        """Clear all stored memories and key-value records."""
+        """Clear all stored memories, key-value records, and reminders."""
         with self._lock, self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("DELETE FROM key_values;")
             cursor.execute("DELETE FROM semantic_chunks;")
+            cursor.execute("DELETE FROM scheduled_reminders;")
             conn.commit()
+
 
 
 # Default singleton instance

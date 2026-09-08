@@ -23,3 +23,4 @@ customtkinter>=5.2.0
 pystray>=0.19.5
 keyboard>=0.13.5
 PySide6>=6.6.0
+windows-toasts>=1.1.0

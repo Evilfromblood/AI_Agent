@@ -18,6 +18,7 @@ import tools  # Automatically registers file, scraper, and browser tools
 from agent.core import JarvisAgent
 from agent.llm_client import LLMClient
 from config import config
+from daemon import HardwareSentry, TaskScheduler
 from tools.browser_tools import browser_controller
 from tools.registry import registry
 from voice.voice_input import VoiceInputHandler
@@ -249,12 +250,22 @@ def main() -> None:
         run_demo(agent)
         sys.exit(0)
 
-    if args.hud:
-        run_hud_mode(agent, vm)
-    elif args.voice or config.voice_enabled:
-        run_ambient_voice_mode(agent, vm)
-    else:
-        repl(agent, vm, voice_mode=args.voice)
+    # Initialize and start proactive background daemons
+    sentry = HardwareSentry(vm=vm, voice_alert=True)
+    scheduler = TaskScheduler(vm=vm, voice_alert=True)
+    sentry.start()
+    scheduler.start()
+
+    try:
+        if args.hud:
+            run_hud_mode(agent, vm)
+        elif args.voice or config.voice_enabled:
+            run_ambient_voice_mode(agent, vm)
+        else:
+            repl(agent, vm, voice_mode=args.voice)
+    finally:
+        sentry.stop()
+        scheduler.stop()
 
 
 

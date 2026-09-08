@@ -60,6 +60,7 @@ class HUDSignals(QObject):
     agent_response = Signal(str)  # final answer
     voice_transcript = Signal(str)  # transcribed voice prompt
     toggle_visibility = Signal()  # hotkey trigger
+    show_hud = Signal()  # toast click trigger
     adjust_geometry = Signal()  # snug canvas snapping
     trigger_voice = Signal()
     trigger_vision = Signal()
@@ -128,6 +129,7 @@ class QtHUD(QWidget):
         self.signals.agent_response.connect(self._handle_agent_response)
         self.signals.voice_transcript.connect(self._handle_voice_transcript)
         self.signals.toggle_visibility.connect(self.toggle_window, Qt.ConnectionType.QueuedConnection)
+        self.signals.show_hud.connect(self.show_and_focus, Qt.ConnectionType.QueuedConnection)
         self.signals.adjust_geometry.connect(self._snap_geometry)
         self.signals.trigger_voice.connect(self.trigger_voice)
         self.signals.trigger_vision.connect(self.trigger_vision)
@@ -645,6 +647,16 @@ class QtHUD(QWidget):
             self.activateWindow()
             self.input_line.setFocus(Qt.FocusReason.ActiveWindowFocusReason)
 
+    def show_and_focus(self) -> None:
+        """Bring floating HUD to foreground, unminimize if needed, and focus input."""
+        if self.isMinimized():
+            self.setWindowState(self.windowState() & ~Qt.WindowState.WindowMinimized)
+        self.show()
+        self.raise_()
+        self.setWindowState(self.windowState() & ~Qt.WindowState.WindowMinimized | Qt.WindowState.WindowActive)
+        self.activateWindow()
+        self.input_line.setFocus(Qt.FocusReason.ActiveWindowFocusReason)
+
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
         """Handle Escape key: stop speech if speaking, else hide HUD."""
@@ -737,11 +749,15 @@ def run_qt_hud(agent: JarvisAgent, vm: Optional[VoiceManager] = None) -> None:
         def shutdown(self):
             self.hud.signals.exit_app.emit()
 
+    from daemon.notifier import toast_notifier
+    toast_notifier.set_default_activation_callback(lambda: hud.signals.show_hud.emit())
+
     proxy = QtTrayProxy(hud)
     tray = TrayManager(controller=proxy, hotkey=None)
     hud.tray_manager = tray
 
     tray.start()
+
 
     hud.show()
     hud.raise_()
