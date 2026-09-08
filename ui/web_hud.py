@@ -246,7 +246,7 @@ class WebHUDAPI:
 
 class WebHUD:
     """
-    Manages the PyWebView window lifecycle, global Alt+Space hotkey hook,
+    Manages the PyWebView window lifecycle, global Ctrl+Space hotkey hook,
     and system tray hub persistence.
     """
 
@@ -256,7 +256,7 @@ class WebHUD:
         vm: Optional[VoiceManager] = None,
         width: int = 740,
         height: int = 190,
-        hotkey: str = "alt+space",
+        hotkey: str = "ctrl+space",
     ):
         self.agent = agent
         self.vm = vm or voice_manager
@@ -365,7 +365,7 @@ def run_web_hud(agent: JarvisAgent, vm: Optional[VoiceManager] = None) -> None:
             self.api.exit_app()
 
     tray_proxy = TrayControllerProxy(hud.api)
-    tray = TrayManager(controller=tray_proxy, hotkey="alt+space")
+    tray = TrayManager(controller=tray_proxy, hotkey="ctrl+space")
     hud.api.tray_manager = tray
     tray.start()
 

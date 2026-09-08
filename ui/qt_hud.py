@@ -2,7 +2,7 @@
 Native PySide6 Translucent Floating HUD for JARVIS Desktop Assistant.
 Renders a frameless, transparent, always-on-top glassmorphic command bar
 with thread-safe Qt signals, ReAct live execution streaming, snug canvas snapping,
-global Alt+Space hotkey support, and Escape key speech interrupt.
+global Ctrl+Space hotkey support, and Escape key speech interrupt.
 """
 
 import html
@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
 )
 
 from agent.core import JarvisAgent
+from config import config
 from tools.browser_tools import browser_controller
 from voice.voice_manager import VoiceManager, voice_manager
 
@@ -39,6 +40,7 @@ try:
     HAS_KEYBOARD = True
 except ImportError:
     HAS_KEYBOARD = False
+
 
 
 # Theme Palette
@@ -79,14 +81,15 @@ class QtHUD(QWidget):
         agent: JarvisAgent,
         vm: Optional[VoiceManager] = None,
         width: int = 740,
-        hotkey: str = "alt+space",
+        hotkey: Optional[str] = None,
         parent: Optional[QWidget] = None,
     ):
         super().__init__(parent)
         self.agent = agent
         self.vm = vm or voice_manager
         self.hud_width = width
-        self.hotkey = hotkey
+        self.hotkey = hotkey if hotkey is not None else getattr(config, "hud_hotkey", "ctrl+space")
+        self.fallback_hotkey = getattr(config, "hud_hotkey_fallback", "ctrl+shift+space")
 
         self._is_processing = False
         self._lock = threading.Lock()
@@ -124,7 +127,7 @@ class QtHUD(QWidget):
         self.signals.status_change.connect(self._handle_status_change)
         self.signals.agent_response.connect(self._handle_agent_response)
         self.signals.voice_transcript.connect(self._handle_voice_transcript)
-        self.signals.toggle_visibility.connect(self.toggle_window)
+        self.signals.toggle_visibility.connect(self.toggle_window, Qt.ConnectionType.QueuedConnection)
         self.signals.adjust_geometry.connect(self._snap_geometry)
         self.signals.trigger_voice.connect(self.trigger_voice)
         self.signals.trigger_vision.connect(self.trigger_vision)
@@ -132,6 +135,7 @@ class QtHUD(QWidget):
         self.signals.clear_feed.connect(self.clear_history)
         self.signals.stop_speech.connect(self.stop_speech)
         self.signals.exit_app.connect(self.exit_app)
+
 
     def _build_ui(self) -> None:
         """Build the glassmorphic HUD layout and widgets."""
@@ -185,7 +189,7 @@ class QtHUD(QWidget):
         header_layout.addStretch()
 
         # Keyboard Shortcut Hint
-        shortcut_hint = QLabel("Alt+Space / Esc", self.container)
+        shortcut_hint = QLabel("Ctrl+Space / Esc", self.container)
         shortcut_hint.setStyleSheet(f"color: {TEXT_MUTED}; font-size: 10px;")
         header_layout.addWidget(shortcut_hint)
 
@@ -219,7 +223,7 @@ class QtHUD(QWidget):
 
         self.input_line = QLineEdit(self.container)
         self.input_line.setObjectName("QueryInput")
-        self.input_line.setPlaceholderText("Ask JARVIS anything, or click a quick action...")
+        self.input_line.setPlaceholderText("Ask JARVIS or speak... (Ctrl+Space to toggle, Esc to hide)")
         self.input_line.setStyleSheet(f"""
             QLineEdit {{
                 background-color: rgba(30, 41, 59, 0.7);
@@ -550,7 +554,7 @@ class QtHUD(QWidget):
                     self._is_processing = False
                 self.signals.status_change.emit("IDLE")
                 # Restore placeholder on main thread
-                QTimer.singleShot(100, lambda: self.input_line.setPlaceholderText("Ask JARVIS anything..."))
+                QTimer.singleShot(100, lambda: self.input_line.setPlaceholderText("Ask JARVIS or speak... (Ctrl+Space to toggle, Esc to hide)"))
 
         threading.Thread(target=_worker, daemon=True, name="JARVIS-QtHUD-Worker").start()
 
@@ -611,25 +615,36 @@ class QtHUD(QWidget):
     # --- Hotkey, Escape & Window Management ---
 
     def _register_hotkey(self) -> None:
-        """Register the system-wide Alt+Space hotkey hook."""
-        if not HAS_KEYBOARD:
+        """Register the system-wide global hotkey hook with fallback support."""
+        if not HAS_KEYBOARD or not self.hotkey:
             return
 
-        try:
-            keyboard.add_hotkey(self.hotkey, lambda: self.signals.toggle_visibility.emit())
-            self._hotkey_hooked = True
-        except Exception:
-            self._hotkey_hooked = False
+        candidates = [self.hotkey]
+        if self.fallback_hotkey and self.fallback_hotkey not in candidates:
+            candidates.append(self.fallback_hotkey)
+
+        for hk in candidates:
+            try:
+                keyboard.add_hotkey(hk, lambda: self.signals.toggle_visibility.emit())
+                self._hotkey_hooked = True
+                self.hotkey = hk
+                break
+            except Exception:
+                self._hotkey_hooked = False
 
     def toggle_window(self) -> None:
-        """Toggle HUD visibility smoothly without focus loss."""
+        """Toggle HUD visibility smoothly and reliably regain focus over active windows."""
         if self.isVisible():
             self.hide()
         else:
+            if self.isMinimized():
+                self.setWindowState(self.windowState() & ~Qt.WindowState.WindowMinimized)
             self.show()
             self.raise_()
+            self.setWindowState(self.windowState() & ~Qt.WindowState.WindowMinimized | Qt.WindowState.WindowActive)
             self.activateWindow()
-            self.input_line.setFocus()
+            self.input_line.setFocus(Qt.FocusReason.ActiveWindowFocusReason)
+
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
         """Handle Escape key: stop speech if speaking, else hide HUD."""
@@ -723,8 +738,9 @@ def run_qt_hud(agent: JarvisAgent, vm: Optional[VoiceManager] = None) -> None:
             self.hud.signals.exit_app.emit()
 
     proxy = QtTrayProxy(hud)
-    tray = TrayManager(controller=proxy, hotkey="alt+space")
+    tray = TrayManager(controller=proxy, hotkey=None)
     hud.tray_manager = tray
+
     tray.start()
 
     hud.show()

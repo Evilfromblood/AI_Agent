@@ -7,7 +7,7 @@ collapsible ReAct reasoning drawer, quick actions, speech interrupt, and Escape 
 import os
 import sys
 import time
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 import pytest
 
 # Ensure offscreen rendering for headless testing environments
@@ -89,6 +89,8 @@ def test_qt_hud_components_exist(hud):
     # Collapsed by default
     assert hud.react_log.isVisible() is False
     assert hud.response_box.isVisible() is False
+    assert "Ctrl+Space" in hud.input_line.placeholderText()
+    assert hud.hotkey == "ctrl+space"
 
 
 def test_qt_hud_agent_log_streaming(hud, qapp):
@@ -251,3 +253,26 @@ def test_qt_tray_proxy_integration(hud, qapp):
     qapp.processEvents()
 
     assert signals_received == ["toggle", "voice", "stats", "clear", "exit"]
+
+
+def test_qt_hud_hotkey_registration_and_fallback(qapp, mock_agent, mock_vm):
+    """Verify QtHUD registers ctrl+space and falls back to ctrl+shift+space if needed."""
+    with patch("keyboard.add_hotkey") as mock_add_hotkey:
+        hud1 = QtHUD(agent=mock_agent, vm=mock_vm)
+        mock_add_hotkey.assert_called_with("ctrl+space", ANY)
+        assert hud1._hotkey_hooked is True
+        hud1.close()
+
+    # Simulate primary failure and fallback success
+    with patch("keyboard.add_hotkey") as mock_add_hotkey:
+        def side_effect(key, callback):
+            if key == "ctrl+space":
+                raise RuntimeError("Key bound by another app")
+            return None
+        mock_add_hotkey.side_effect = side_effect
+
+        hud2 = QtHUD(agent=mock_agent, vm=mock_vm)
+        assert mock_add_hotkey.call_count == 2
+        assert hud2.hotkey == "ctrl+shift+space"
+        assert hud2._hotkey_hooked is True
+        hud2.close()

@@ -1,7 +1,7 @@
 """
 Background System Tray Manager and Global Hotkey Daemon for JARVIS.
 Integrates pystray for Windows taskbar tray persistence and keyboard for
-system-wide Alt+Space hotkey registration.
+system-wide Ctrl+Space hotkey registration.
 """
 
 import threading
@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING, Optional
 
 from PIL import Image, ImageDraw
 import pystray
+
+from config import config
 
 if TYPE_CHECKING:
     from ui.app_controller import AppController
@@ -26,12 +28,14 @@ class TrayManager:
     and global hotkey listener.
     """
 
-    def __init__(self, controller: "AppController", hotkey: str = "alt+space"):
+    def __init__(self, controller: "AppController", hotkey: Optional[str] = None):
         self.controller = controller
-        self.hotkey = hotkey
+        self.hotkey = hotkey if hotkey is not None else getattr(config, "hud_hotkey", "ctrl+space")
+        self.fallback_hotkey = getattr(config, "hud_hotkey_fallback", "ctrl+shift+space")
         self._icon: Optional[pystray.Icon] = None
         self._tray_thread: Optional[threading.Thread] = None
         self._hotkey_hooked = False
+
 
     @staticmethod
     def create_arc_reactor_icon(size: int = 64) -> Image.Image:
@@ -66,7 +70,7 @@ class TrayManager:
         icon_image = self.create_arc_reactor_icon(64)
 
         menu = pystray.Menu(
-            pystray.MenuItem("Toggle HUD (Alt+Space)", lambda: self.controller.toggle_hud(), default=True),
+            pystray.MenuItem("Toggle HUD (Ctrl+Space)", lambda: self.controller.toggle_hud(), default=True),
             pystray.MenuItem("Voice Query", lambda: self.controller.trigger_voice()),
             pystray.MenuItem("System Stats", lambda: self.controller.trigger_system_stats()),
             pystray.MenuItem("Clear History", lambda: self.controller.clear_output()),
@@ -77,7 +81,7 @@ class TrayManager:
         self._icon = pystray.Icon(
             name="JARVIS-Hub",
             icon=icon_image,
-            title="JARVIS Desktop Assistant",
+            title="Ask JARVIS or speak... (Ctrl+Space to toggle, Esc to hide)",
             menu=menu,
         )
 
@@ -90,16 +94,23 @@ class TrayManager:
         self._tray_thread.start()
 
     def _register_hotkey(self) -> None:
-        """Register the system-wide global hotkey hook."""
-        if not HAS_KEYBOARD:
+        """Register the system-wide global hotkey hook with fallback support."""
+        if not HAS_KEYBOARD or not self.hotkey:
             return
 
-        try:
-            keyboard.add_hotkey(self.hotkey, self.controller.toggle_hud)
-            self._hotkey_hooked = True
-        except Exception:
-            # Catch permissions/OS restrictions gracefully
-            self._hotkey_hooked = False
+        candidates = [self.hotkey]
+        if self.fallback_hotkey and self.fallback_hotkey not in candidates:
+            candidates.append(self.fallback_hotkey)
+
+        for hk in candidates:
+            try:
+                keyboard.add_hotkey(hk, self.controller.toggle_hud)
+                self._hotkey_hooked = True
+                self.hotkey = hk
+                break
+            except Exception:
+                self._hotkey_hooked = False
+
 
     def stop(self) -> None:
         """Unhook hotkeys and terminate the tray icon."""

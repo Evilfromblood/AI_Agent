@@ -137,7 +137,7 @@ class JarvisFloatingHUD(customtkinter.CTk):
         # 2. Command Input Entry
         self.entry = customtkinter.CTkEntry(
             self.top_bar,
-            placeholder_text="Ask JARVIS or speak... (Alt+Space toggle, Esc hide)",
+            placeholder_text="Ask JARVIS or speak... (Ctrl+Space to toggle, Esc to hide)",
             placeholder_text_color="#64748B",
             font=("Segoe UI", 13),
             fg_color="#1E293B",

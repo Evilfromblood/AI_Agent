@@ -212,7 +212,7 @@ def run_hud_mode(agent: JarvisAgent, vm: VoiceManager) -> None:
 
     print(BANNER)
     print_status(agent.llm, agent.mode)
-    print(f"{Fore.GREEN}[PySide6 Floating HUD Active] Press Alt+Space to toggle HUD, Esc to hide.{Style.RESET_ALL}\n")
+    print(f"{Fore.GREEN}[HUD Mode Active] Press Ctrl+Space to toggle HUD, Esc to hide.{Style.RESET_ALL}\n")
 
     try:
         run_qt_hud(agent=agent, vm=vm)

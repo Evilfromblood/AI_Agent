@@ -232,7 +232,7 @@ def test_tray_manager_icon_generation():
 
 def test_tray_manager_start_and_stop():
     mock_ctrl = MagicMock(spec=AppController)
-    tray = TrayManager(controller=mock_ctrl, hotkey="alt+space")
+    tray = TrayManager(controller=mock_ctrl, hotkey="ctrl+space")
 
     with patch("pystray.Icon") as mock_pystray_icon_cls, \
          patch("keyboard.add_hotkey") as mock_add_hotkey, \
@@ -244,10 +244,11 @@ def test_tray_manager_start_and_stop():
         tray.start()
 
         mock_pystray_icon_cls.assert_called_once()
-        mock_add_hotkey.assert_called_once_with("alt+space", mock_ctrl.toggle_hud)
+        mock_add_hotkey.assert_called_once_with("ctrl+space", mock_ctrl.toggle_hud)
         assert tray._hotkey_hooked is True
 
         tray.stop()
         mock_unhook.assert_called_once()
         mock_icon_instance.stop.assert_called_once()
         assert tray._hotkey_hooked is False
+

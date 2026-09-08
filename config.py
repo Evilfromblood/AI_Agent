@@ -155,6 +155,15 @@ class AssistantConfig(BaseModel):
         default=3,
         description="Maximum relevant memory chunks to inject into agent context",
     )
+    # Desktop Floating HUD & Hotkey Settings
+    hud_hotkey: str = Field(
+        default="ctrl+space",
+        description="Global hotkey combination to toggle HUD visibility",
+    )
+    hud_hotkey_fallback: str = Field(
+        default="ctrl+shift+space",
+        description="Fallback hotkey combination if primary registration fails",
+    )
 
 
 # Singleton default configuration
