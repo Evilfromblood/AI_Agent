@@ -2,6 +2,8 @@
 
 A modular desktop AI agent for Windows and Linux that combines a **local LLM**, optional **cloud fallback**, structured tool execution, persistent memory, browser automation, and screen-aware GUI automation.
 
+[![CI](https://github.com/Evilfromblood/AI_Agent/actions/workflows/ci.yml/badge.svg)](https://github.com/Evilfromblood/AI_Agent/actions/workflows/ci.yml)
+
 The project is designed around a simple principle: the language model plans; explicit tools perform actions; safety guardrails sit between the model and potentially destructive operations.
 
 ## Architecture
@@ -163,8 +165,6 @@ Keep tests runnable without requiring real destructive desktop actions or commit
 
 ## Roadmap
 
-- GitHub Actions for automated pytest runs
-- stronger typed tool schemas
 - end-to-end agent evaluation scenarios
 - structured execution traces and replay
 - configurable permission policies per tool
