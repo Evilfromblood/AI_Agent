@@ -1,114 +1,177 @@
-# JARVIS Desktop Assistant (Phases 1, 2 & 3.1)
+# Local-First Desktop AI Agent
 
-A modular, local-first "JARVIS"-style desktop assistant in Python designed for Windows and Linux. It pairs a **Primary Local Brain** (`gemma4:latest` via Ollama) with an **Online Supporting Brain** (Google Gemini 3.6 Flash via official `google-genai`), autonomous self-thinking (`Plan` -> `Critique` -> `Action`), stealth browser automation, system telemetry, and **Desktop GUI Automation & Screen Perception**.
+A modular desktop AI agent for Windows and Linux that combines a **local LLM**, optional **cloud fallback**, structured tool execution, persistent memory, browser automation, and screen-aware GUI automation.
 
----
+The project is designed around a simple principle: the language model plans; explicit tools perform actions; safety guardrails sit between the model and potentially destructive operations.
 
-## Architectural Overview
+## Architecture
 
-```
-                          +-------------------------+
-                          |   User Voice / Text     |
-                          +------------+------------+
-                                       |
-                                       v
-                          +-------------------------+
-                          |   Dual-Brain Router     |
-                          | (Local Gemma 4 / Gemini)|
-                          +------------+------------+
-                                       |
-                                       v
-                          +-------------------------+
-                          |  Self-Thinking Engine   |
-                          |  Plan, Critique, Adapt  |
-                          +------------+------------+
-                                       |
-        +------------------------------+------------------------------+
-        |                              |                              |
-        v                              v                              v
-+---------------+              +---------------+              +---------------+
-| System Tools  |              | Browser Tools |              | GUI & Vision  |
-| - psutil      |              | - Stealth Chrome             | - mss Screen  |
-| - App Control |              | - JS Click Fallback          | - PyAutoGUI   |
-| - File Ops    |              | - Live DOM Soup              | - Gemini 3.6V |
-+---------------+              +---------------+              +---------------+
+```text
+User
+  ↓
+Agent Orchestrator
+  ↓
+Local LLM ──────────────── Optional Cloud Co-Pilot
+  ↓
+Planning / Tool Selection
+  ↓
+Policy & Safety Guardrails
+  ↓
+Tool Registry
+  ├── Filesystem
+  ├── Terminal
+  ├── Browser
+  ├── System
+  ├── GUI / Screen
+  └── Voice
+  ↓
+Observation
+  ↓
+Next Action / Final Response
 ```
 
----
+## Key capabilities
 
-## Directory & File Structure
+- Local-first LLM execution through Ollama
+- Optional online model fallback for tool-failure diagnosis
+- Structured ReAct-style multi-step execution
+- Native tool-calling execution mode
+- Central tool registry and schema generation
+- Persistent contextual memory
+- Browser automation with Selenium
+- Desktop screenshot capture and screen perception
+- Mouse, keyboard and system-hotkey automation
+- Human confirmation for destructive operations
+- PyAutoGUI fail-safe behavior
+- System telemetry and application launching
+- Voice-input support with graceful dependency/hardware fallback
 
-```
-jolly-hawking/
-├── config.py                 # Pydantic configuration (models, timeouts, hotkey guardrails)
-├── main.py                   # Interactive CLI REPL with /help, /tools, /copilot, /voice
-├── requirements.txt          # Dependencies (ollama, google-genai, selenium, psutil, pyautogui, mss, pillow)
+## Safety model
+
+Desktop automation can cause real side effects, so the project treats tool execution as a separate policy boundary.
+
+Examples of controls include:
+
+- explicit confirmation for dangerous hotkeys
+- coordinate bounds checking before mouse actions
+- PyAutoGUI fail-safe mode
+- guarded text entry
+- bounded scraper payloads
+- consecutive tool-failure tracking
+- optional cloud escalation only after configured failure thresholds
+
+The safety layer is intentionally independent of the model's natural-language reasoning.
+
+## Project structure
+
+```text
+AI_Agent/
+├── main.py
+├── config.py
+├── requirements.txt
 ├── agent/
-│   ├── llm_client.py         # Dual-brain router: Ollama (gemma4) + GeminiClientWrapper (gemini-3.6-flash)
-│   ├── prompts.py            # JARVIS persona & self-reflecting ReAct loop (Plan & Critique)
-│   ├── react_parser.py       # Balanced JSON parser with token stripping (<channel|>, <end_of_turn>)
-│   └── core.py               # Orchestrator with consecutive tool failure escalation
+│   ├── core.py
+│   ├── llm_client.py
+│   ├── prompts.py
+│   └── react_parser.py
+├── memory/
+│   └── memory_store.py
 ├── tools/
-│   ├── registry.py           # Central tool decorator, schema generator, and executor
-│   ├── guardrails.py         # Human-in-the-loop confirmation for destructive commands & hotkeys
-│   ├── file_tools.py         # list_directory, read_file, write_file, search_files, run_terminal_command
-│   ├── scraper_tools.py      # scrape_page_content (bounded token budget), extract_links
-│   ├── browser_tools.py      # BrowserController: stealth Chrome, JS click fallback, wait_for_page_load
-│   ├── system_tools.py       # get_system_stats (CPU/RAM/Disk), launch_application
-│   └── gui_tools.py          # take_screenshot, analyze_screen_with_vision, click_screen_coordinate, type_screen_text, send_system_hotkey
+│   ├── registry.py
+│   ├── guardrails.py
+│   ├── file_tools.py
+│   ├── scraper_tools.py
+│   ├── browser_tools.py
+│   ├── system_tools.py
+│   └── gui_tools.py
 ├── voice/
-│   └── voice_input.py        # Audio capture handler with graceful library/hardware fallback
+│   └── voice_input.py
 └── tests/
-    ├── test_file_tools.py    # Unit tests for file ops & safety guardrails
-    ├── test_scraper_tools.py # Unit tests for web scraping & payload truncation
-    ├── test_browser_tools.py # Unit tests for BrowserController & Selenium
-    ├── test_system_tools.py  # Unit tests for hardware stats & application launcher
-    ├── test_gui_tools.py     # Unit tests for screen capture, PyAutoGUI, hotkeys, & vision grounding
-    └── test_agent_react.py   # Unit tests for ReAct parser, Plan/Critique, & Gemini escalation
+    ├── test_file_tools.py
+    ├── test_scraper_tools.py
+    ├── test_browser_tools.py
+    ├── test_system_tools.py
+    ├── test_gui_tools.py
+    └── test_agent_react.py
 ```
 
----
+## Execution modes
 
-## Phase 3.1 Capabilities: Desktop GUI Automation & Screen Perception
+### ReAct mode
 
-1. **High-Speed Screen Capture (`mss` + `pillow`)**:
-   - `take_screenshot(filename, region)`: Multi-monitor hardware-accelerated screenshot capture with optional bounding box cropping.
-2. **Vision Grounding with Gemini 3.6 Flash**:
-   - `analyze_screen_with_vision(prompt, image_path)`: Uses `google-genai` to analyze desktop screenshots, detect active windows, extract text from dialogs, and estimate pixel coordinates `(x, y)` for buttons and UI elements.
-3. **Safe Mouse & Keyboard Control (`pyautogui`)**:
-   - `click_screen_coordinate(x, y, clicks, button)`: Mouse positioning with strict resolution boundary verification.
-   - `type_screen_text(text, press_enter, interval)`: Sequential character typing into active windows, gated by guardrails against malicious script injection.
-   - `send_system_hotkey(keys)`: Dispatches OS shortcuts (e.g. `["win", "r"]`, `["ctrl", "s"]`).
-4. **Safety Guardrails & Fail-Safe Protection**:
-   - `pyautogui.FAILSAFE = True` enabled globally: Slamming cursor into any screen corner immediately aborts running automation.
-   - Dangerous hotkeys (`alt+f4`, `win+l`, `ctrl+alt+del`, `win+x`) require explicit human confirmation (`Authorize? [y/N]: `).
+The agent iteratively processes:
 
----
+```text
+Plan → Critique → Action → Observation → ... → Final Answer
+```
 
-## Quick Start & Verification
+Tool observations are fed back into the execution trajectory so the agent can adapt to failures and changing state.
 
-### 1. Installation
+### Native tool-calling mode
+
+When supported by the local model, the agent can use structured tool calls directly instead of parsing textual Action blocks.
+
+## Installation
+
 ```powershell
 pip install -r requirements.txt
 ```
 
-### 2. Configure Cloud Co-Pilot & Vision (Optional)
+For optional cloud-assisted diagnosis and vision capabilities, configure the required API key through an environment variable rather than committing credentials:
+
 ```powershell
-$env:GEMINI_API_KEY="your-gemini-api-key"
+$env:GEMINI_API_KEY="your-api-key"
 ```
 
-### 3. Check System Status
+## Run
+
+Check system status:
+
 ```powershell
 python main.py --status
 ```
 
-### 4. Run Interactive Assistant
+Start the interactive assistant:
+
 ```powershell
 python main.py
 ```
 
-### 5. Automated Tests
+Run the test suite:
+
 ```powershell
 pytest tests/ -v
 ```
-All **39/39** tests pass across all subsystems.
+
+## Engineering decisions
+
+**Local-first:** core interaction should remain usable without sending every request to a cloud service.
+
+**Explicit tools:** filesystem, browser and desktop operations are implemented as typed tool boundaries rather than arbitrary model-generated shell commands.
+
+**Guardrails outside the prompt:** safety checks are enforced in executable code so they do not depend solely on model compliance.
+
+**Two execution paths:** ReAct parsing makes the agent compatible with models that emit structured text, while native tool calling provides a cleaner path when the model supports it.
+
+**Failure escalation:** repeated tool failures can trigger an optional cloud co-pilot for diagnosis instead of blindly retrying the same action.
+
+## Testing
+
+Tests cover the tool registry, filesystem operations, scraping, browser integration, system utilities, GUI automation, vision-related behavior, and the agent's ReAct execution path.
+
+Keep tests runnable without requiring real destructive desktop actions or committed credentials.
+
+## Roadmap
+
+- GitHub Actions for automated pytest runs
+- stronger typed tool schemas
+- end-to-end agent evaluation scenarios
+- structured execution traces and replay
+- configurable permission policies per tool
+- improved memory retrieval and lifecycle management
+- Linux/macOS-specific automation adapters
+- benchmark suite for task success, latency and tool failures
+
+## Status
+
+Active experimental/portfolio project exploring local-first AI agents, tool orchestration, desktop automation, and safety-aware execution.
